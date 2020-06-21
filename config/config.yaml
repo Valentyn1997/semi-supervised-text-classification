@@ -35,7 +35,7 @@ early_stopping_patience: 5  #
 gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
 seed: 45  # random seed for initialization
 overwrite_cache: True  # Overwrite the cached training and evaluation sets
-checkpoint: True  # Checkpoint weights, optimizer state to MlFlow
+checkpoint: False  # Checkpoint weights, optimizer state to MlFlow
 
 # Hydra defaults
 defaults:

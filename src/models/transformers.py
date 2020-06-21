@@ -6,7 +6,6 @@ import os
 import logging
 import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
-from pytorch_lightning.loggers import MLFlowLogger
 
 from src import MODEL_CLASSES, OUTPUT_MODES, DATA_PATH
 from src.data.processor import PROCESSORS, convert_examples_to_features
@@ -79,16 +78,11 @@ class PretrainedTransformer(LightningModule):
         optimizer = AdamW(optimizer_grouped_parameters,
                           lr=self.args.optimizer.learning_rate,
                           eps=self.args.optimizer.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=self.args.optimizer.warmup_steps,
-                                                    num_training_steps=self.args.t_total)
-
-        # Check if saved optimizer or scheduler states exist
-        if os.path.isfile(os.path.join(self.args.model.model_name_or_path, "optimizer.pt")) \
-                and os.path.isfile(os.path.join(self.args.model.model_name_or_path, "scheduler.pt")):
-            optimizer.load_state_dict(torch.load(os.path.join(self.args.model.model_name_or_path, "optimizer.pt")))
-            scheduler.load_state_dict(torch.load(os.path.join(self.args.model.model_name_or_path, "scheduler.pt")))
-
+        scheduler = {
+            'scheduler': get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.args.optimizer.warmup_steps,
+                                                         num_training_steps=self.args.max_steps),
+            'interval': 'step'
+        }
         return [optimizer], [scheduler]
 
     def train_dataloader(self) -> DataLoader:
@@ -99,9 +93,9 @@ class PretrainedTransformer(LightningModule):
         val_sampler = SequentialSampler(self.val_dataset)
         return DataLoader(self.val_dataset, sampler=val_sampler, batch_size=self.args.data.batch_size.val, num_workers=4)
 
-    # def test_dataloader(self) -> DataLoader:
-    #     test_sampler = SequentialSampler(self.test_dataset)
-    #     return DataLoader(self.val_dataset, sampler=test_sampler, batch_size=self.args.data.batch_size.test)
+    def test_dataloader(self) -> DataLoader:
+        test_sampler = SequentialSampler(self.test_dataset)
+        return DataLoader(self.test_dataset, sampler=test_sampler, batch_size=self.args.data.batch_size.test, num_workers=4)
 
     def forward(self, x):
         inputs = {"input_ids": x[0], "attention_mask": x[1], "labels": x[3]}
@@ -129,14 +123,25 @@ class PretrainedTransformer(LightningModule):
         results['labels'] = batch[3].detach().cpu().numpy()
         return results
 
+    test_step = validation_step
+
     def validation_epoch_end(self, outputs):
         loss_val_mean = torch.tensor(np.array([x['loss'] for x in outputs]).mean())
+        mlflow_metrics = {'val_loss': loss_val_mean, **self.calculate_metrics(outputs, prefix='val')}
+        return {'loss': loss_val_mean, 'log': mlflow_metrics}
+
+    def test_epoch_end(self, outputs):
+        loss_test_mean = torch.tensor(np.array([x['loss'] for x in outputs]).mean())
+        mlflow_metrics = {'val_loss': loss_test_mean, **self.calculate_metrics(outputs, prefix='test')}
+        return {'loss': loss_test_mean, 'log': mlflow_metrics}
+
+    @staticmethod
+    def calculate_metrics(outputs, prefix):
         preds = np.array([prob for x in outputs for prob in x['preds']])
         preds = np.argmax(preds, axis=1)
         labels = np.array([label for x in outputs for label in x['labels']])
-        result = acc_and_f1(preds, labels, prefix='val')
-        mlflow_metrics = {'val_loss': loss_val_mean, **result}
-        return {'loss': loss_val_mean, 'log': mlflow_metrics}
+        result = acc_and_f1(preds, labels, prefix=prefix)
+        return result
 
     def load_and_cache_examples(self, evaluate=False, validate=False):
         # Load data features from cache or dataset file

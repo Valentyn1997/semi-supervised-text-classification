@@ -27,10 +27,9 @@ def main(args: DictConfig):
     train_dataloader = model_wrapper.train_dataloader()
 
     if args.max_steps > 0:
-        args.t_total = args.max_steps  # total optimization tests
         args.num_train_epochs = (args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1)
     else:
-        args.t_total = (len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs)
+        args.max_steps = (len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs)
 
     set_seed(args)
 
@@ -48,8 +47,10 @@ def main(args: DictConfig):
                       gradient_clip_val=args.optimizer.max_grad_norm,
                       early_stop_callback=early_stop_callback,
                       val_check_interval=0.5,
-                      checkpoint_callback=checkpoint_callback if args.checkpoint else None)
+                      checkpoint_callback=checkpoint_callback if args.checkpoint else None,
+                      )
     trainer.fit(model_wrapper, train_dataloader=train_dataloader)
+    trainer.test()
 
 
 if __name__ == "__main__":
