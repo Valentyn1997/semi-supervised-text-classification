@@ -9,10 +9,10 @@ model: # Model params
 
 # Data params
 data:
+  path: ???   #  data/in-topic | data/cross-topic
   test_id:  # The topic id of the test_set. Set value -1 for random selection from all topics. ["abortion", "cloning", "death_penalty", "gun_control", "marijuana_legalization", "minimum_wage", "nuclear_energy", "school_uniforms"]
   max_seq_length: 60  # The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,
                         # sequences shorter will be padded.
-  mask: # ???
   validation_size: 0.15  # The size of the validation set based on the train-set
   batch_size:  # Batch size per GPU/CPU for training
     train: 10
@@ -29,8 +29,8 @@ optimizer:
 
 # Experiment
 task_name: SD  # The name of the task to train selected in the list
-max_steps: -1   # If > 0: set total number of training steps to perform. Override num_train_epochs
-num_train_epochs: 2  # Total number of training epochs to perform.
+max_steps: -1   # If > 0: set total number of training steps to perform. Override max_epochs
+max_epochs: 9999  # Total number of training epochs to perform.
 early_stopping_patience: 5  #
 gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
 seed: 45  # random seed for initialization

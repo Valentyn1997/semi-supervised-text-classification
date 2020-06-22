@@ -1,5 +1,4 @@
 from pytorch_lightning import LightningModule, Trainer
-from pytorch_lightning.callbacks.base import Callback
 from omegaconf import DictConfig
 import torch
 import os
@@ -7,7 +6,7 @@ import logging
 import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
 
-from src import MODEL_CLASSES, OUTPUT_MODES, DATA_PATH
+from src import MODEL_CLASSES, OUTPUT_MODES
 from src.data.processor import PROCESSORS, convert_examples_to_features
 from src.utils import acc_and_f1
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
@@ -48,11 +47,12 @@ class PretrainedTransformer(LightningModule):
             'model_name_or_path': self.args.model.model_name_or_path,
             'task_name': self.args.task_name,
             'test_id': self.args.data.test_id,
-            'setting': 'In-Topic' if self.args.data.test_id is None else 'Cross-Topic',
+            'setting': self.args.data.setting,
             'batch_size': self.args.data.batch_size,
             'gradient_accumulation_steps': self.args.gradient_accumulation_steps,
-            'num_train_epochs': self.args.num_train_epochs,
+            'max_epochs': self.args.max_epochs,
             'early_stopping_patience': self.args.early_stopping_patience,
+            'max_seq_length': self.args.data.max_seq_length
         }
 
     def prepare_data(self):
@@ -147,7 +147,7 @@ class PretrainedTransformer(LightningModule):
         # Load data features from cache or dataset file
         if validate and not evaluate:
             cached_features_file = os.path.join(
-                DATA_PATH,
+                self.args.data.path,
                 "cached_{}_{}_{}_{}_{}".format(
                     "valid",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
@@ -159,7 +159,7 @@ class PretrainedTransformer(LightningModule):
 
         elif evaluate and not validate:
             cached_features_file = os.path.join(
-                DATA_PATH,
+                self.args.data.path,
                 "cached_{}_{}_{}_{}_{}".format(
                     "test",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
@@ -172,7 +172,7 @@ class PretrainedTransformer(LightningModule):
         elif not evaluate and not validate:
             # if active learning, the train data will be saved inside each learning iteration directory
             cached_features_file = os.path.join(
-                DATA_PATH,
+                self.args.data.path,
                 "cached_{}_{}_{}_{}_{}".format(
                     "train",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
@@ -186,7 +186,7 @@ class PretrainedTransformer(LightningModule):
             logger.info("Loading features from cached file %s", cached_features_file)
             features = torch.load(cached_features_file)
         else:
-            logger.info("Creating features from dataset file at %s", DATA_PATH)
+            logger.info("Creating features from dataset file at %s", self.args.data.path)
             label_list = self.processor.get_labels()
             if validate and not evaluate:
                 examples = self.processor.get_valid_examples(self.args)

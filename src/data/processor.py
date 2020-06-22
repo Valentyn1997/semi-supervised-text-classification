@@ -1,4 +1,3 @@
-from src import DATA_PATH
 from omegaconf import DictConfig
 import logging
 import os
@@ -17,37 +16,41 @@ logger = logging.getLogger(__name__)
 class SDProcessor(DataProcessor):
     """Processor for the AM data set."""
 
+    def __init__(self):
+        super().__init__()
+        self.mask = None  # Used for train/val split for cross-topic setting
+
     def get_train_examples(self, args: DictConfig):
         if args.data.test_id is None:
-            df = self.read_tsv(os.path.join(DATA_PATH, "train.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "train.tsv"))
             return self._create_examples(df)
         else:
-            df = self.read_tsv(os.path.join(DATA_PATH, "complete.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_train_set = df[df["topic"] != args.data.test_id]
-            if args.data.mask is None:
-                args.data.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
-            df_train_set = df_train_set[args.data.mask]
+            if self.mask is None:
+                self.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
+            df_train_set = df_train_set[self.mask]
             return self._create_examples(df_train_set)
 
     def get_test_examples(self, args: DictConfig):
         if args.data.test_id is None:
-            df = self.read_tsv(os.path.join(DATA_PATH, "test.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "test.tsv"))
             return self._create_examples(df)
         else:
-            df = self.read_tsv(os.path.join(DATA_PATH, "complete.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_test_set = df[df["topic"] == args.data.test_id]
             return self._create_examples(df_test_set)
 
     def get_valid_examples(self, args: DictConfig):
         if args.data.test_id is None:
-            df = self.read_tsv(os.path.join(DATA_PATH, "val.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "val.tsv"))
             return self._create_examples(df)
         else:
-            df = self.read_tsv(os.path.join(DATA_PATH, "complete.tsv"))
+            df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_train_set = df[df["topic"] != args.data.test_id]
-            if args.data.mask is None:
-                args.data.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
-            df_train_set = df_train_set[~args.data.mask]
+            if self.mask is None:
+                self.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
+            df_train_set = df_train_set[~self.mask]
             return self._create_examples(df_train_set)
 
     def get_labels(self):
