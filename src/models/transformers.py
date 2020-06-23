@@ -33,12 +33,14 @@ class PretrainedTransformer(LightningModule):
                                                         else self.args.model.model_name_or_path,
                                                         num_labels=self.num_labels,
                                                         finetuning_task=self.args.exp.task_name,
-                                                        cache_dir=self.args.model.cache_dir if self.args.model.cache_dir else None)
+                                                        cache_dir=self.args.model.cache_dir if self.args.model.cache_dir
+                                                        else None)
 
         self.tokenizer = self.tokenizer_class.from_pretrained(self.args.model.tokenizer_name if self.args.model.tokenizer_name
                                                               else self.args.model.model_name_or_path,
                                                               do_lower_case=self.args.model.do_lower_case,
-                                                              cache_dir=self.args.model.cache_dir if self.args.model.cache_dir else None)
+                                                              cache_dir=self.args.model.cache_dir if self.args.model.cache_dir
+                                                              else None)
 
         self.model = self.model_class.from_pretrained(self.args.model.model_name_or_path,
                                                       from_tf=bool(".ckpt" in self.args.model.model_name_or_path),
@@ -75,7 +77,8 @@ class PretrainedTransformer(LightningModule):
 
     def on_save_checkpoint(self, checkpoint):
         self.best_model = deepcopy(self.model)
-        self.trainer.logger.log_metrics({'best_epoch': self.trainer.current_epoch + 1})
+        self.trainer.logger.log_metrics({'best_epoch': self.trainer.current_epoch + 1},
+                                        step=self.trainer.global_step)
 
     def configure_optimizers(self):
         no_decay = ["bias", "LayerNorm.weight"]
