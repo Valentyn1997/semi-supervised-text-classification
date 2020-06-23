@@ -30,8 +30,10 @@ MODEL_CLASSES = {
 }
 
 OUTPUT_MODES = {
-    "SD": "classification",
+    "SL": "classification",
+    "SSL": "classification",
 }
-TASKS_NUM_LABELS = {
-    "AP": 2,
-}
+
+# TASKS_NUM_LABELS = {
+#     "AP": 2,
+# }

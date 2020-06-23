@@ -28,36 +28,41 @@ def main(args: DictConfig):
     experiment_id = mlf_logger.experiment.get_experiment_by_name(experiment_name).experiment_id
 
     # Load pretrained model and tokenizer
-    model_wrapper = PretrainedTransformer(args=args)
-    model_wrapper.prepare_data()
-    train_dataloader = model_wrapper.train_dataloader()
+    set_seed(args)
+    model = PretrainedTransformer(args)
+    model.prepare_data()
+    train_dataloader = model.train_dataloader()
 
-    # Max number of epochs/steps
-    if args.max_steps > 0:
-        args.max_epochs = (args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1)
+    # Max number of epochs/steps - secondary parameter
+    if args.exp.max_steps > 0:
+        args.exp.max_epochs = (args.exp.max_steps // (len(train_dataloader) // args.exp.gradient_accumulation_steps) + 1)
     else:
-        args.max_steps = (len(train_dataloader) // args.gradient_accumulation_steps * args.max_epochs)
+        args.exp.max_steps = (len(train_dataloader) // args.exp.gradient_accumulation_steps * args.exp.max_epochs)
 
     # Early stopping & Checkpointing
-    early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.00, patience=args.early_stopping_patience,
+    early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.00, patience=args.exp.early_stopping_patience,
                                         verbose=False, mode='min')
     checkpoint_callback = ModelCheckpoint(filepath=f'{ROOT_PATH}/mlruns/{experiment_id}/{run_id}/artifacts',
                                           verbose=True, monitor='val_loss', mode='min', save_top_k=1, period=0)
     # Setting seeds & printing paranms
-    set_seed(args)
     logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Training
     trainer = Trainer(gpus=1,
                       logger=mlf_logger,
-                      max_epochs=args.max_epochs,
+                      max_epochs=args.exp.max_epochs,
                       gradient_clip_val=args.optimizer.max_grad_norm,
                       early_stop_callback=early_stop_callback,
                       val_check_interval=0.5,
-                      checkpoint_callback=checkpoint_callback if args.checkpoint else None,
-                      accumulate_grad_batches=args.gradient_accumulation_steps)
-    trainer.fit(model_wrapper, train_dataloader=train_dataloader)
-    trainer.test()
+                      checkpoint_callback=checkpoint_callback if args.exp.checkpoint else None,
+                      accumulate_grad_batches=args.exp.gradient_accumulation_steps,
+                      auto_lr_find=args.optimizer.auto_lr_find)
+    trainer.fit(model, train_dataloader=train_dataloader)
+
+    # Testing
+    model.model = model.best_model
+    trainer.run_evaluation(test_mode=True)
+    checkpoint_callback._del_model(checkpoint_callback.best_model_path)
 
 
 if __name__ == "__main__":

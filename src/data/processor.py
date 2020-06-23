@@ -13,8 +13,8 @@ if is_tf_available():
 logger = logging.getLogger(__name__)
 
 
-class SDProcessor(DataProcessor):
-    """Processor for the AM data set."""
+class SLProcessor(DataProcessor):
+    """Processor for the argument mining supervised data set."""
 
     def __init__(self):
         super().__init__()
@@ -28,8 +28,12 @@ class SDProcessor(DataProcessor):
             df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_train_set = df[df["topic"] != args.data.test_id]
             if self.mask is None:
-                self.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
-            df_train_set = df_train_set[self.mask]
+                train_indices = np.random.choice(range(len(df_train_set)),
+                                                 int((1 - args.data.validation_size) * len(df_train_set)),
+                                                 replace=False)
+                self.mask = np.zeros(len(df_train_set), dtype=int)
+                self.mask[train_indices] = 1
+            df_train_set = df_train_set[self.mask.astype(bool)]
             return self._create_examples(df_train_set)
 
     def get_test_examples(self, args: DictConfig):
@@ -49,8 +53,12 @@ class SDProcessor(DataProcessor):
             df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_train_set = df[df["topic"] != args.data.test_id]
             if self.mask is None:
-                self.mask = np.random.rand(len(df_train_set)) < 1 - args.data.validation_size
-            df_train_set = df_train_set[~self.mask]
+                val_indices = np.random.choice(range(len(df_train_set)),
+                                               int(args.data.validation_size * len(df_train_set)),
+                                               replace=False)
+                self.mask = np.ones(len(df_train_set), dtype=int)
+                self.mask[val_indices] = 0
+            df_train_set = df_train_set[~self.mask.astype(bool)]
             return self._create_examples(df_train_set)
 
     def get_labels(self):
@@ -77,22 +85,12 @@ class SDProcessor(DataProcessor):
 
 
 PROCESSORS = {
-    "SD": SDProcessor,
+    "SL": SLProcessor,  # fully-supervised setting
 }
 
 
-def convert_examples_to_features(
-    examples,
-    tokenizer,
-    max_length=512,
-    task=None,
-    label_list=None,
-    output_mode=None,
-    pad_on_left=False,
-    pad_token=0,
-    pad_token_segment_id=0,
-    mask_padding_with_zero=True,
-):
+def convert_examples_to_features(examples, tokenizer, max_length=512, task=None, label_list=None, output_mode=None,
+                                 pad_on_left=False, pad_token=0, pad_token_segment_id=0, mask_padding_with_zero=True):
     """
     Loads a data file into a list of ``InputFeatures``
     Args:
@@ -140,12 +138,7 @@ def convert_examples_to_features(
         if ex_index % 10000 == 0:
             logger.info("Writing example %d/%d" % (ex_index, len_examples))
 
-        inputs = tokenizer.encode_plus(
-            example.text_a,
-            example.text_b,
-            add_special_tokens=True,
-            max_length=max_length,
-        )
+        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length)
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -156,26 +149,16 @@ def convert_examples_to_features(
         padding_length = max_length - len(input_ids)
         if pad_on_left:
             input_ids = ([pad_token] * padding_length) + input_ids
-            attention_mask = (
-                [0 if mask_padding_with_zero else 1] * padding_length
-            ) + attention_mask
+            attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
             token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
         else:
             input_ids = input_ids + ([pad_token] * padding_length)
-            attention_mask = attention_mask + (
-                [0 if mask_padding_with_zero else 1] * padding_length
-            )
+            attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
             token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
 
-        assert len(input_ids) == max_length, "Error with input length {} vs {}".format(
-            len(input_ids), max_length
-        )
-        assert (
-            len(attention_mask) == max_length
-        ), "Error with input length {} vs {}".format(len(attention_mask), max_length)
-        assert (
-            len(token_type_ids) == max_length
-        ), "Error with input length {} vs {}".format(len(token_type_ids), max_length)
+        assert len(input_ids) == max_length, "Error with input length {} vs {}".format(len(input_ids), max_length)
+        assert (len(attention_mask) == max_length), "Error with input length {} vs {}".format(len(attention_mask), max_length)
+        assert (len(token_type_ids) == max_length), "Error with input length {} vs {}".format(len(token_type_ids), max_length)
 
         if output_mode == "classification":
             label = label_map[example.label]
@@ -188,22 +171,14 @@ def convert_examples_to_features(
             logger.info("*** Example ***")
             logger.info("guid: %s" % example.guid)
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info(
-                "attention_mask: %s" % " ".join([str(x) for x in attention_mask])
-            )
-            logger.info(
-                "token_type_ids: %s" % " ".join([str(x) for x in token_type_ids])
-            )
+            logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
+            logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
             logger.info("label: %s (id = %d)" % (example.label, label))
 
-        features.append(
-            InputFeatures(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
-                label=label,
-            )
-        )
+        features.append(InputFeatures(input_ids=input_ids,
+                                      attention_mask=attention_mask,
+                                      token_type_ids=token_type_ids,
+                                      label=label))
 
     if is_tf_available() and is_tf_dataset:
 

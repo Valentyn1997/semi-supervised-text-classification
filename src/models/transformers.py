@@ -1,9 +1,11 @@
-from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning import LightningModule
 from omegaconf import DictConfig
+from argparse import Namespace
 import torch
 import os
 import logging
 import numpy as np
+from copy import deepcopy
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 from src import MODEL_CLASSES, OUTPUT_MODES
@@ -18,53 +20,62 @@ class PretrainedTransformer(LightningModule):
     def __init__(self, args: DictConfig):
         super().__init__()
         self.args = args
+        # self.save_hyperparameters(dictconfig_to_dict(args))
 
-        self.processor = PROCESSORS[args.task_name]()
-        self.output_mode = OUTPUT_MODES[args.task_name]
+        self.processor = PROCESSORS[self.args.exp.task_name]()
+        self.output_mode = OUTPUT_MODES[self.args.exp.task_name]
         label_list = self.processor.get_labels()
         self.num_labels = len(label_list)
 
-        self.config_class, self.model_class, self.tokenizer_class = MODEL_CLASSES[args.model.model_type]
+        self.config_class, self.model_class, self.tokenizer_class = MODEL_CLASSES[self.args.model.model_type]
 
-        self.config = self.config_class.from_pretrained(args.model.config_name if args.model.config_name
-                                                        else args.model.model_name_or_path,
+        self.config = self.config_class.from_pretrained(self.args.model.config_name if self.args.model.config_name
+                                                        else self.args.model.model_name_or_path,
                                                         num_labels=self.num_labels,
-                                                        finetuning_task=args.task_name,
-                                                        cache_dir=args.model.cache_dir if args.model.cache_dir else None)
+                                                        finetuning_task=self.args.exp.task_name,
+                                                        cache_dir=self.args.model.cache_dir if self.args.model.cache_dir else None)
 
-        self.tokenizer = self.tokenizer_class.from_pretrained(args.model.tokenizer_name if args.model.tokenizer_name
-                                                              else args.model.model_name_or_path,
-                                                              do_lower_case=args.model.do_lower_case,
-                                                              cache_dir=args.model.cache_dir if args.model.cache_dir else None)
+        self.tokenizer = self.tokenizer_class.from_pretrained(self.args.model.tokenizer_name if self.args.model.tokenizer_name
+                                                              else self.args.model.model_name_or_path,
+                                                              do_lower_case=self.args.model.do_lower_case,
+                                                              cache_dir=self.args.model.cache_dir if self.args.model.cache_dir else None)
 
-        self.model = self.model_class.from_pretrained(args.model.model_name_or_path,
-                                                      from_tf=bool(".ckpt" in args.model.model_name_or_path),
+        self.model = self.model_class.from_pretrained(self.args.model.model_name_or_path,
+                                                      from_tf=bool(".ckpt" in self.args.model.model_name_or_path),
                                                       config=self.config,
-                                                      cache_dir=args.model.cache_dir if args.model.cache_dir else None)
+                                                      cache_dir=self.args.model.cache_dir if self.args.model.cache_dir else None)
+        self.best_model = self.model
+
         # Will be logged to mlflow
-        self.hparams = {
+        self.hparams = Namespace(**{
+            'lr': self.args.optimizer.learning_rate,
             'model_type': self.args.model.model_type,
             'model_name_or_path': self.args.model.model_name_or_path,
-            'task_name': self.args.task_name,
+            'task_name': self.args.exp.task_name,
             'test_id': self.args.data.test_id,
             'setting': self.args.data.setting,
             'batch_size': self.args.data.batch_size,
-            'gradient_accumulation_steps': self.args.gradient_accumulation_steps,
-            'max_epochs': self.args.max_epochs,
-            'early_stopping_patience': self.args.early_stopping_patience,
-            'max_seq_length': self.args.data.max_seq_length
-        }
+            'gradient_accumulation_steps': self.args.exp.gradient_accumulation_steps,
+            'max_epochs': self.args.exp.max_epochs,
+            'early_stopping_patience': self.args.exp.early_stopping_patience,
+            'max_seq_length': self.args.data.max_seq_length,
+            'auto_lr_find': args.optimizer.auto_lr_find
+        })
 
     def prepare_data(self):
-        if 'data_size' not in self.hparams:
+        if 'data_size' not in self.args:
             self.train_dataset = self.load_and_cache_examples(evaluate=False, validate=False)
             self.test_dataset = self.load_and_cache_examples(evaluate=True)
             self.val_dataset = self.load_and_cache_examples(evaluate=False, validate=True)
-            self.hparams['data_size'] = {
+            self.args.data_size = DictConfig({
                 'train': len(self.train_dataset),
                 'val': len(self.val_dataset),
                 'test': len(self.test_dataset)
-            }
+            })
+
+    def on_save_checkpoint(self, checkpoint):
+        self.best_model = deepcopy(self.model)
+        self.trainer.logger.log_metrics({'best_epoch': self.trainer.current_epoch + 1})
 
     def configure_optimizers(self):
         no_decay = ["bias", "LayerNorm.weight"]
@@ -76,11 +87,11 @@ class PretrainedTransformer(LightningModule):
         ]
 
         optimizer = AdamW(optimizer_grouped_parameters,
-                          lr=self.args.optimizer.learning_rate,
+                          lr=self.hparams.lr,
                           eps=self.args.optimizer.adam_epsilon)
         scheduler = {
             'scheduler': get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.args.optimizer.warmup_steps,
-                                                         num_training_steps=self.args.max_steps),
+                                                         num_training_steps=self.args.exp.max_steps),
             'interval': 'step'
         }
         return [optimizer], [scheduler]
@@ -152,7 +163,7 @@ class PretrainedTransformer(LightningModule):
                     "valid",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
                     str(self.args.data.max_seq_length),
-                    str(self.args.task_name),
+                    str(self.args.exp.task_name),
                     str(self.args.data.test_id),
                 ),
             )
@@ -164,7 +175,7 @@ class PretrainedTransformer(LightningModule):
                     "test",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
                     str(self.args.data.max_seq_length),
-                    str(self.args.task_name),
+                    str(self.args.exp.task_name),
                     str(self.args.data.test_id),
                 ),
             )
@@ -177,7 +188,7 @@ class PretrainedTransformer(LightningModule):
                     "train",
                     list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
                     str(self.args.data.max_seq_length),
-                    str(self.args.task_name),
+                    str(self.args.exp.task_name),
                     str(self.args.data.test_id),
                 ),
             )

@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 def set_seed(args: DictConfig):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(args.exp.seed)
+    np.random.seed(args.exp.seed)
+    torch.manual_seed(args.exp.seed)
     if torch.cuda.device_count() > 0:
-        torch.cuda.manual_seed_all(args.seed)
+        torch.cuda.manual_seed_all(args.exp.seed)
 
 
 def simple_accuracy(preds, labels):
