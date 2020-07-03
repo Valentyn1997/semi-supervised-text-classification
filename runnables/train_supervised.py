@@ -48,7 +48,7 @@ def main(args: DictConfig):
     logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Training
-    trainer = Trainer(gpus=1,
+    trainer = Trainer(gpus=list(args.exp.gpus),
                       logger=mlf_logger,
                       max_epochs=args.exp.max_epochs,
                       gradient_clip_val=args.optimizer.max_grad_norm,

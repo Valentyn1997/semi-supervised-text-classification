@@ -13,7 +13,7 @@ if is_tf_available():
 logger = logging.getLogger(__name__)
 
 
-class SLProcessor(DataProcessor):
+class SupervisedTwoLabelProcessor(DataProcessor):
     """Processor for the argument mining supervised data set."""
 
     def __init__(self):
@@ -85,7 +85,7 @@ class SLProcessor(DataProcessor):
 
 
 PROCESSORS = {
-    "SL": SLProcessor,  # fully-supervised setting
+    "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting
 }
 
 
