@@ -19,13 +19,18 @@ def main(args: DictConfig):
 
     # Secondary data args
     args.data.setting = 'in-topic' if args.data.test_id is None else 'cross-topic'
+    dataset_name = args.data.path.split('/')[1]
     args.data.path = f'{ROOT_PATH}/{args.data.path}'
 
     # MlFlow Logging
-    experiment_name = f'supervised-{args.data.setting}'
-    mlf_logger = MLFlowLogger(experiment_name=experiment_name, tracking_uri=MLFLOW_URI)
-    run_id = mlf_logger.run_id
-    experiment_id = mlf_logger.experiment.get_experiment_by_name(experiment_name).experiment_id
+    if args.exp.logging:
+        experiment_name = f'{dataset_name}/supervised-{args.data.setting}/{args.exp.task_name}'
+        mlf_logger = MLFlowLogger(experiment_name=experiment_name, tracking_uri=MLFLOW_URI)
+        run_id = mlf_logger.run_id
+        experiment_id = mlf_logger.experiment.get_experiment_by_name(experiment_name).experiment_id
+        cpnt_path = f'{ROOT_PATH}/mlruns/{experiment_id}/{run_id}/artifacts'
+    else:
+        cpnt_path = None
 
     # Load pretrained model and tokenizer
     set_seed(args)
@@ -42,14 +47,14 @@ def main(args: DictConfig):
     # Early stopping & Checkpointing
     early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.00, patience=args.exp.early_stopping_patience,
                                         verbose=False, mode='min')
-    checkpoint_callback = ModelCheckpoint(filepath=f'{ROOT_PATH}/mlruns/{experiment_id}/{run_id}/artifacts',
-                                          verbose=True, monitor='val_loss', mode='min', save_top_k=1, period=0)
+    checkpoint_callback = ModelCheckpoint(filepath=cpnt_path, verbose=True, monitor='val_loss', mode='min', save_top_k=1,
+                                          period=0)
     # Setting seeds & printing paranms
     logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Training
     trainer = Trainer(gpus=list(args.exp.gpus),
-                      logger=mlf_logger,
+                      logger=mlf_logger if args.exp.logging else None,
                       max_epochs=args.exp.max_epochs,
                       gradient_clip_val=args.optimizer.max_grad_norm,
                       early_stop_callback=early_stop_callback,

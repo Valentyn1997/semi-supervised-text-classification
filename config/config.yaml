@@ -30,6 +30,7 @@ optimizer:
 
 # Experiment
 exp:
+  logging: True   # Logging to MlFlow
   task_name: SL2  # The name of the task to train selected in the list
   max_steps: -1   # If > 0: set total number of training steps to perform. Override max_epochs
   max_epochs: 1000  # Total number of training epochs to perform.

@@ -20,6 +20,7 @@ class PretrainedTransformer(LightningModule):
     def __init__(self, args: DictConfig):
         super().__init__()
         self.args = args
+        self.lr = None  # Placeholder for auto_lr_find
         # self.save_hyperparameters(dictconfig_to_dict(args))
 
         self.processor = PROCESSORS[self.args.exp.task_name]()
@@ -66,10 +67,10 @@ class PretrainedTransformer(LightningModule):
 
     def prepare_data(self):
         if 'data_size' not in self.args:
-            self.train_dataset = self.load_and_cache_examples(evaluate=False, validate=False)
-            self.test_dataset = self.load_and_cache_examples(evaluate=True)
-            self.val_dataset = self.load_and_cache_examples(evaluate=False, validate=True)
-            self.args.data_size = DictConfig({
+            self.train_dataset = self.load_and_cache_examples(mode='train')
+            self.test_dataset = self.load_and_cache_examples(mode='test')
+            self.val_dataset = self.load_and_cache_examples(mode='val')
+            self.hparams.data_size = DictConfig({
                 'train': len(self.train_dataset),
                 'val': len(self.val_dataset),
                 'test': len(self.test_dataset)
@@ -81,6 +82,9 @@ class PretrainedTransformer(LightningModule):
                                         step=self.trainer.global_step)
 
     def configure_optimizers(self):
+        if self.lr is not None:
+            self.hparams.lr = self.lr
+
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {"params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
@@ -146,7 +150,7 @@ class PretrainedTransformer(LightningModule):
 
     def test_epoch_end(self, outputs):
         loss_test_mean = torch.tensor(np.array([x['loss'] for x in outputs]).mean())
-        mlflow_metrics = {'val_loss': loss_test_mean, **self.calculate_metrics(outputs, prefix='test')}
+        mlflow_metrics = {'test_loss': loss_test_mean, **self.calculate_metrics(outputs, prefix='test')}
         return {'loss': loss_test_mean, 'log': mlflow_metrics}
 
     @staticmethod
@@ -157,68 +161,71 @@ class PretrainedTransformer(LightningModule):
         result = acc_and_f1(preds, labels, prefix=prefix)
         return result
 
-    def load_and_cache_examples(self, evaluate=False, validate=False):
+    def load_and_cache_examples(self, mode):
+
         # Load data features from cache or dataset file
-        if validate and not evaluate:
-            cached_features_file = os.path.join(
-                self.args.data.path,
-                "cached_{}_{}_{}_{}_{}".format(
-                    "valid",
-                    list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
-                    str(self.args.data.max_seq_length),
-                    str(self.args.exp.task_name),
-                    str(self.args.data.test_id),
-                ),
-            )
+        # if validate and not evaluate:
+        #     cached_features_file = os.path.join(
+        #         self.args.data.path,
+        #         "cached_{}_{}_{}_{}_{}".format(
+        #             "valid",
+        #             list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
+        #             str(self.args.data.max_seq_length),
+        #             str(self.args.exp.task_name),
+        #             str(self.args.data.test_id),
+        #         ),
+        #     )
+        #
+        # elif evaluate and not validate:
+        #     cached_features_file = os.path.join(
+        #         self.args.data.path,
+        #         "cached_{}_{}_{}_{}_{}".format(
+        #             "test",
+        #             list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
+        #             str(self.args.data.max_seq_length),
+        #             str(self.args.exp.task_name),
+        #             str(self.args.data.test_id),
+        #         ),
+        #     )
+        #
+        # elif not evaluate and not validate:
+        #     # if active learning, the train data will be saved inside each learning iteration directory
+        #     cached_features_file = os.path.join(
+        #         self.args.data.path,
+        #         "cached_{}_{}_{}_{}_{}".format(
+        #             "train",
+        #             list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
+        #             str(self.args.data.max_seq_length),
+        #             str(self.args.exp.task_name),
+        #             str(self.args.data.test_id),
+        #         ),
+        #     )
+        #
+        # if os.path.exists(cached_features_file) and not self.args.overwrite_cache:
+        #     logger.info("Loading features from cached file %s", cached_features_file)
+        #     features = torch.load(cached_features_file)
+        # else:
+        logger.info("Creating features from dataset file at %s", self.args.data.path)
+        label_list = self.processor.get_labels()
+        examples = getattr(self.processor, f'get_{mode}_examples')(self.args)
 
-        elif evaluate and not validate:
-            cached_features_file = os.path.join(
-                self.args.data.path,
-                "cached_{}_{}_{}_{}_{}".format(
-                    "test",
-                    list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
-                    str(self.args.data.max_seq_length),
-                    str(self.args.exp.task_name),
-                    str(self.args.data.test_id),
-                ),
-            )
+        # if validate and not evaluate:
+        #
+        # elif evaluate and not validate:
+        #     examples = self.processor.get_test_examples(self.args)
+        # elif not evaluate and not validate:
+        #     examples = self.processor.get_train_examples(self.args)
 
-        elif not evaluate and not validate:
-            # if active learning, the train data will be saved inside each learning iteration directory
-            cached_features_file = os.path.join(
-                self.args.data.path,
-                "cached_{}_{}_{}_{}_{}".format(
-                    "train",
-                    list(filter(None, self.args.model.model_name_or_path.split("/"))).pop(),
-                    str(self.args.data.max_seq_length),
-                    str(self.args.exp.task_name),
-                    str(self.args.data.test_id),
-                ),
-            )
-
-        if os.path.exists(cached_features_file) and not self.args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            features = torch.load(cached_features_file)
-        else:
-            logger.info("Creating features from dataset file at %s", self.args.data.path)
-            label_list = self.processor.get_labels()
-            if validate and not evaluate:
-                examples = self.processor.get_valid_examples(self.args)
-            elif evaluate and not validate:
-                examples = self.processor.get_test_examples(self.args)
-            elif not evaluate and not validate:
-                examples = self.processor.get_train_examples(self.args)
-
-            features = convert_examples_to_features(
-                examples,
-                self.tokenizer,
-                label_list=label_list,
-                max_length=self.args.data.max_seq_length,
-                output_mode=self.output_mode,
-                pad_on_left=bool(self.args.model.model_type in ["xlnet"]),
-                pad_token=self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0],
-                pad_token_segment_id=4 if self.args.model.model_type in ["xlnet"] else 0,
-            )
+        features = convert_examples_to_features(
+            examples,
+            self.tokenizer,
+            label_list=label_list,
+            max_length=self.args.data.max_seq_length,
+            output_mode=self.output_mode,
+            pad_on_left=bool(self.args.model.model_type in ["xlnet"]),
+            pad_token=self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0],
+            pad_token_segment_id=4 if self.args.model.model_type in ["xlnet"] else 0,
+        )
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)

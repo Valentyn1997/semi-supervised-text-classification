@@ -45,7 +45,7 @@ class SupervisedTwoLabelProcessor(DataProcessor):
             df_test_set = df[df["topic"] == args.data.test_id]
             return self._create_examples(df_test_set)
 
-    def get_valid_examples(self, args: DictConfig):
+    def get_val_examples(self, args: DictConfig):
         if args.data.test_id is None:
             df = self.read_tsv(os.path.join(args.data.path, "val.tsv"))
             return self._create_examples(df)
@@ -84,8 +84,27 @@ class SupervisedTwoLabelProcessor(DataProcessor):
         return examples
 
 
+class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
+    def get_labels(self):
+        """Gets the list of labels for this data set."""
+        return ["Argument_for", "Argument_against", "NoArgument"]
+
+    @staticmethod
+    def _create_examples(df):
+        """Creates examples for the training and test sets"""
+        examples = []
+        for index, row in df.iterrows():
+            guid = index
+            text_a = row["sentence"]
+            text_b = row["topic"]
+            label = row["annotation"]
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
 PROCESSORS = {
-    "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting
+    "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting, 2 labels: "Argument_for", "Argument_against"
+    "SL3": SupervisedThreeLabelProcessor,  # fully-supervised setting, 3 labels: "Argument_for", "Argument_against", "NoArgument"
 }
 
 
