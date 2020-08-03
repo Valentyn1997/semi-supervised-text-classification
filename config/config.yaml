@@ -1,0 +1,52 @@
+# Model params
+model: # Model params
+  model_type: bert # Model type selected in the list
+  model_name_or_path: bert-large-uncased # Path to pre-trained model or shortcut name selected in the list  # ["bert-large-uncased", "bert-large-cased", "bert-base-uncased", "bert-base-cased"],
+  config_name: ${model.model_name_or_path} # Pre-trained config name or path if not the same as model_name
+  tokenizer_name: ${model.model_name_or_path} # Pre-trained tokenizer name or path if not the same as model_name
+  cache_dir: # Where do you want to store the pre-trained models downloaded from s3
+  do_lower_case: True  # Set this flag if you are using an uncased model
+
+# Data params
+data:
+  path: ???   #  data/in-topic | data/cross-topic
+  test_id:  # The topic id of the test_set. Set value -1 for random selection from all topics. ["abortion", "cloning", "death_penalty", "gun_control", "marijuana_legalization", "minimum_wage", "nuclear_energy", "school_uniforms"]
+  max_seq_length: 60  # The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,
+                        # sequences shorter will be padded.
+  validation_size: 0.15  # The size of the validation set based on the train-set
+  batch_size:  # Batch size per GPU/CPU for training
+    train: 10
+    val: 20
+    test: 20
+
+# Optimizer
+optimizer:
+  weight_decay: 0.0  # Weight decay if we apply some
+  adam_epsilon: 1e-8  # Epsilon for Adam optimizer
+  learning_rate: 2e-5  # The initial learning rate for Adam
+  warmup_steps: 0   # Linear warmup over warmup_steps
+  max_grad_norm: 1.0   # Max gradient norm
+  auto_lr_find: False  # Auto lr-finding before training
+
+# Experiment
+exp:
+  logging: True   # Logging to MlFlow
+  task_name: SL2  # The name of the task to train selected in the list
+  max_steps: -1   # If > 0: set total number of training steps to perform. Override max_epochs
+  max_epochs: 1000  # Total number of training epochs to perform.
+  early_stopping_patience: 10  #  Number of epochs to wait for early stopping
+  gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
+  seed: 45  # random seed for initialization
+  overwrite_cache: True  # Overwrite the cached training and evaluation sets
+  checkpoint: True  # Saving best model in RAM and then using it for test
+  gpus: [0]
+
+# Resuming training
+#resume:
+#  run_id: ???  # Resume Run ID
+#  model_path: ??? # Model checkpoint filename
+
+# Hydra defaults
+defaults:
+  - hydra/job_logging: colorlog
+  - hydra/hydra_logging: colorlog
