@@ -5,7 +5,6 @@ import torch
 import os
 import logging
 import numpy as np
-from copy import deepcopy
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 from src import MODEL_CLASSES, OUTPUT_MODES
@@ -76,10 +75,10 @@ class PretrainedTransformer(LightningModule):
                 'test': len(self.test_dataset)
             })
 
-    def on_save_checkpoint(self, checkpoint):
-        self.best_model = deepcopy(self.model)
-        self.trainer.logger.log_metrics({'best_epoch': self.trainer.current_epoch + 1},
-                                        step=self.trainer.global_step)
+    # def on_save_checkpoint(self, checkpoint):
+    #     self.best_model = deepcopy(self.model)
+    #     if self.args.exp.logging:
+    #         self.trainer.logger.log_metrics({'best_epoch': self.trainer.current_epoch + 1}, step=self.trainer.global_step)
 
     def configure_optimizers(self):
         if self.lr is not None:
@@ -208,13 +207,6 @@ class PretrainedTransformer(LightningModule):
         logger.info("Creating features from dataset file at %s", self.args.data.path)
         label_list = self.processor.get_labels()
         examples = getattr(self.processor, f'get_{mode}_examples')(self.args)
-
-        # if validate and not evaluate:
-        #
-        # elif evaluate and not validate:
-        #     examples = self.processor.get_test_examples(self.args)
-        # elif not evaluate and not validate:
-        #     examples = self.processor.get_train_examples(self.args)
 
         features = convert_examples_to_features(
             examples,

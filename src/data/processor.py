@@ -67,7 +67,10 @@ class SupervisedTwoLabelProcessor(DataProcessor):
 
     @staticmethod
     def read_tsv(input_file):
-        return pd.read_csv(input_file, sep="\t")
+        df = pd.read_csv(input_file, sep="\t")
+        df = df.replace(np.nan, '', regex=True)
+        df["topic"] = df["topic"].apply(lambda x: x.replace(' ', '_'))
+        return df
 
     @staticmethod
     def _create_examples(df):

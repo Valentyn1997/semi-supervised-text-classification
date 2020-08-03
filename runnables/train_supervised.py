@@ -1,14 +1,15 @@
 import logging
 import hydra
+import torch
 from omegaconf import DictConfig
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import MLFlowLogger
-from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 from src import MLFLOW_URI, CONFIG_PATH, ROOT_PATH
 from src.models.transformers import PretrainedTransformer
+from src.models.checkpoint import CustomModelCheckpoint
 from src.utils import set_seed
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,9 @@ def main(args: DictConfig):
     # Early stopping & Checkpointing
     early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.00, patience=args.exp.early_stopping_patience,
                                         verbose=False, mode='min')
-    checkpoint_callback = ModelCheckpoint(filepath=cpnt_path, verbose=True, monitor='val_loss', mode='min', save_top_k=1,
-                                          period=0)
-    # Setting seeds & printing paranms
+    checkpoint_callback = CustomModelCheckpoint(model=model, filepath=cpnt_path, verbose=True, monitor='val_loss', mode='min',
+                                                save_top_k=1, period=0)
+
     logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Training
@@ -67,7 +68,13 @@ def main(args: DictConfig):
     # Testing
     model.model = model.best_model
     trainer.run_evaluation(test_mode=True)
-    checkpoint_callback._del_model(checkpoint_callback.best_model_path)
+
+    # Cleaning cache
+    torch.cuda.empty_cache()
+
+    # Ending the run
+    if args.exp.logging:
+        mlf_logger.finalize()
 
 
 if __name__ == "__main__":
