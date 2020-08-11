@@ -113,7 +113,8 @@ PROCESSORS = {
     "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting, 2 labels: "Argument_for", "Argument_against"
     "SL3": SupervisedThreeLabelProcessor,  # fully-supervised setting, 3 labels: "Argument_for", "Argument_against", "NoArgument"
     "SSL2": SupervisedTwoLabelProcessor,  # ssl setting, 2 labels: "Argument_for", "Argument_against" + unlabelled subset
-    "SSL3": SupervisedThreeLabelProcessor  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" + unlabelled subset
+    "SSL3": SupervisedThreeLabelProcessor  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" +
+    # unlabelled subset
 }
 
 
@@ -163,7 +164,7 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
         #     example = processor.tfds_map(example)
         #     len_examples = tf.data.experimental.cardinality(examples)
         # else:
-        len_examples = len(examples)
+        # len_examples = len(examples)
         # if ex_index % 10000 == 0:
         #     logger.info("Writing example %d/%d" % (ex_index, len_examples))
 

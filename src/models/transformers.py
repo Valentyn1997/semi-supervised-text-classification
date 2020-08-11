@@ -308,4 +308,3 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                                                             label_list=label_list,
                                                             max_seq_length=self.args.data.max_seq_length,
                                                             model_type=self.args.model.model_type)
-
