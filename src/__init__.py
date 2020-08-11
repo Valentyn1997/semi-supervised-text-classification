@@ -32,5 +32,6 @@ MODEL_CLASSES = {
 OUTPUT_MODES = {
     "SL2": "classification",
     "SL3": "classification",
-    "SSL": "classification",
+    "SSL2": "classification",
+    "SSL3": "classification",
 }
