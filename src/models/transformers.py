@@ -286,8 +286,8 @@ class SSLPretrainedTransformer(PretrainedTransformer):
             return super().load_and_cache_examples(mode)
         elif mode == 'train':
             label_list = self.processor.get_labels()
-            examples_l = getattr(self.processor, f'get_train_examples')(self.args)
-            examples_ul = getattr(self.processor, f'get_unlab_examples')(self.args)
+            examples_l = self.processor.get_train_examples(self.args)
+            examples_ul = self.processor.get_unlab_examples(self.args)
 
             train_l = AugmentableTextClassificationDataset(examples_l, weak_transform=self.weak_transform,
                                                            tokenizer=self.tokenizer, label_list=label_list,

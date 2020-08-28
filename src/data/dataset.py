@@ -99,7 +99,7 @@ class FixMatchCompositeTrainDataset(Dataset):
         ul_indices_repeated = np.tile(ul_indices, ul_n_repeats).reshape(ul_n_repeats, ul_indices.size)
 
         self.l_indexes = np.array(list(map(np.random.permutation, l_indices_repeated))).flatten()[:self.len]
-        self.ul_indexes = np.array(list(map(np.random.permutation, ul_indices_repeated))).flatten()[:self.len*self.mu]
+        self.ul_indexes = np.array(list(map(np.random.permutation, ul_indices_repeated))).flatten()[:self.len * self.mu]
 
         self.l_indexes = self.l_indexes.reshape(self.len, 1)
         self.ul_indexes = self.ul_indexes.reshape(self.len, self.mu)
