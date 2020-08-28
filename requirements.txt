@@ -2,6 +2,7 @@ scikit-learn
 tensorflow
 omegaconf
 transformers==2.3.0
+flake8
 
 hydra-core
 mlflow
