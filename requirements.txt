@@ -1,19 +1,17 @@
 scikit-learn
 tensorflow
 omegaconf
-transformers
-# local package
--e .
-
-# external requirements
-click
-Sphinx
-coverage
-awscli
+transformers==2.3.0
 flake8
-python-dotenv>=0.5.1
 
 hydra-core
-hydra_colorlog
 mlflow
-pytorch-lightning
+pytorch-lightning==0.8.4
+torch==1.4.0
+matplotlib
+hydra_colorlog
+
+nlpaug
+nltk
+fairseq
+fastBPE

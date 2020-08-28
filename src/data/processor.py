@@ -36,6 +36,10 @@ class SupervisedTwoLabelProcessor(DataProcessor):
             df_train_set = df_train_set[self.mask.astype(bool)]
             return self._create_examples(df_train_set)
 
+    def get_unlab_examples(self, args: DictConfig):
+        df = self.read_tsv(os.path.join(args.data.path, "unlabelled.tsv"))
+        return self._create_examples(df)
+
     def get_test_examples(self, args: DictConfig):
         if args.data.test_id is None:
             df = self.read_tsv(os.path.join(args.data.path, "test.tsv"))
@@ -108,6 +112,9 @@ class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
 PROCESSORS = {
     "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting, 2 labels: "Argument_for", "Argument_against"
     "SL3": SupervisedThreeLabelProcessor,  # fully-supervised setting, 3 labels: "Argument_for", "Argument_against", "NoArgument"
+    "SSL2": SupervisedTwoLabelProcessor,  # ssl setting, 2 labels: "Argument_for", "Argument_against" + unlabelled subset
+    "SSL3": SupervisedThreeLabelProcessor  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" +
+    # unlabelled subset
 }
 
 
@@ -134,9 +141,9 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
         containing the task-specific features. If the input is a list of ``InputExamples``, will return
         a list of task-specific ``InputFeatures`` which can be fed to the model.
     """
-    is_tf_dataset = False
-    if is_tf_available() and isinstance(examples, tf.data.Dataset):
-        is_tf_dataset = True
+    # is_tf_dataset = False
+    # if is_tf_available() and isinstance(examples, tf.data.Dataset):
+    #     is_tf_dataset = True
 
     if task is not None:
         processor = PROCESSORS[task]()
@@ -148,19 +155,21 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
             logger.info("Using output mode %s for task %s" % (output_mode, task))
 
     label_map = {label: i for i, label in enumerate(label_list)}
+    label_map['UNL'] = -1
 
     features = []
     for (ex_index, example) in enumerate(examples):
-        if is_tf_dataset:
-            example = processor.get_example_from_tensor_dict(example)
-            example = processor.tfds_map(example)
-            len_examples = tf.data.experimental.cardinality(examples)
-        else:
-            len_examples = len(examples)
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d/%d" % (ex_index, len_examples))
+        # if is_tf_dataset:
+        #     example = processor.get_example_from_tensor_dict(example)
+        #     example = processor.tfds_map(example)
+        #     len_examples = tf.data.experimental.cardinality(examples)
+        # else:
+        # len_examples = len(examples)
+        # if ex_index % 10000 == 0:
+        #     logger.info("Writing example %d/%d" % (ex_index, len_examples))
 
-        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length)
+        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,
+                                       truncation=True)
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -189,50 +198,50 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
         else:
             raise KeyError(output_mode)
 
-        if ex_index < 5:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % example.guid)
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-            logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label))
+        # if ex_index < 5:
+        #     logger.info("*** Example ***")
+        #     logger.info("guid: %s" % example.guid)
+        #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+        #     logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
+        #     logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
+        #     logger.info("label: %s (id = %d)" % (example.label, label))
 
         features.append(InputFeatures(input_ids=input_ids,
                                       attention_mask=attention_mask,
                                       token_type_ids=token_type_ids,
                                       label=label))
 
-    if is_tf_available() and is_tf_dataset:
-
-        def gen():
-            for ex in features:
-                yield (
-                    {
-                        "input_ids": ex.input_ids,
-                        "attention_mask": ex.attention_mask,
-                        "token_type_ids": ex.token_type_ids,
-                    },
-                    ex.label,
-                )
-
-        return tf.data.Dataset.from_generator(
-            gen,
-            (
-                {
-                    "input_ids": tf.int32,
-                    "attention_mask": tf.int32,
-                    "token_type_ids": tf.int32,
-                },
-                tf.int64,
-            ),
-            (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "token_type_ids": tf.TensorShape([None]),
-                },
-                tf.TensorShape([]),
-            ),
-        )
+    # if is_tf_available() and is_tf_dataset:
+    #
+    #     def gen():
+    #         for ex in features:
+    #             yield (
+    #                 {
+    #                     "input_ids": ex.input_ids,
+    #                     "attention_mask": ex.attention_mask,
+    #                     "token_type_ids": ex.token_type_ids,
+    #                 },
+    #                 ex.label,
+    #             )
+    #
+    #     return tf.data.Dataset.from_generator(
+    #         gen,
+    #         (
+    #             {
+    #                 "input_ids": tf.int32,
+    #                 "attention_mask": tf.int32,
+    #                 "token_type_ids": tf.int32,
+    #             },
+    #             tf.int64,
+    #         ),
+    #         (
+    #             {
+    #                 "input_ids": tf.TensorShape([None]),
+    #                 "attention_mask": tf.TensorShape([None]),
+    #                 "token_type_ids": tf.TensorShape([None]),
+    #             },
+    #             tf.TensorShape([]),
+    #         ),
+    #     )
 
     return features

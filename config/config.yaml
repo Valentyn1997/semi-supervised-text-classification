@@ -18,6 +18,8 @@ data:
     train: 10
     val: 20
     test: 20
+  load_from_cache: False
+  write_to_cache: False
 
 # Optimizer
 optimizer:
@@ -37,14 +39,14 @@ exp:
   early_stopping_patience: 10  #  Number of epochs to wait for early stopping
   gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
   seed: 45  # random seed for initialization
-  overwrite_cache: True  # Overwrite the cached training and evaluation sets
   checkpoint: True  # Saving best model in RAM and then using it for test
-  gpus: [0]
+  gpus: '-1'
 
-# Resuming training
-#resume:
-#  run_id: ???  # Resume Run ID
-#  model_path: ??? # Model checkpoint filename
+# Additional SSL params
+ssl:
+  mu: 8  # 4 per GPU
+  threshold: 0.8
+  lambda_u: 5.0
 
 # Hydra defaults
 defaults:
