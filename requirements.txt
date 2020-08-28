@@ -1,12 +1,16 @@
-nlpaug
 scikit-learn
 tensorflow
 omegaconf
-transformers
+transformers==2.3.0
 
 hydra-core
 mlflow
-pytorch-lightning
+pytorch-lightning==0.8.4
 torch==1.4.0
 matplotlib
 hydra_colorlog
+
+nlpaug
+nltk
+fairseq
+fastBPE

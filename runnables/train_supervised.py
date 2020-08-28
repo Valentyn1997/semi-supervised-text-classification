@@ -61,11 +61,15 @@ def main(args: DictConfig):
                       val_check_interval=0.5,
                       checkpoint_callback=checkpoint_callback if args.exp.checkpoint else None,
                       accumulate_grad_batches=args.exp.gradient_accumulation_steps,
-                      auto_lr_find=args.optimizer.auto_lr_find)
+                      auto_lr_find=args.optimizer.auto_lr_find,
+                      distributed_backend='dp')
     trainer.fit(model, train_dataloader=train_dataloader)
 
     # Testing
     model.model = model.best_model
+    trainer.model = trainer.model.module
+    trainer.use_dp = False
+    trainer.single_gpu = True
     trainer.run_evaluation(test_mode=True)
 
     # Cleaning cache

@@ -54,6 +54,7 @@ def main(args: DictConfig):
 
     # Training
     trainer = Trainer(gpus=eval(str(args.exp.gpus)),
+                      num_nodes=1,
                       logger=mlf_logger if args.exp.logging else None,
                       max_epochs=args.exp.max_epochs,
                       gradient_clip_val=args.optimizer.max_grad_norm,

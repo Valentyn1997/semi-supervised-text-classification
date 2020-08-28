@@ -44,7 +44,7 @@ exp:
 
 # Additional SSL params
 ssl:
-  mu: 7
+  mu: 8  # 4 per GPU
   threshold: 0.8
   lambda_u: 5.0
 
