@@ -38,16 +38,18 @@ class PretrainedTransformer(LightningModule):
                                                         cache_dir=self.hparams.model.cache_dir if self.hparams.model.cache_dir
                                                         else None)
 
-        self.tokenizer = self.tokenizer_class.from_pretrained(self.hparams.model.tokenizer_name if self.hparams.model.tokenizer_name
+        self.tokenizer = self.tokenizer_class.from_pretrained(self.hparams.model.tokenizer_name
+                                                              if self.hparams.model.tokenizer_name
                                                               else self.hparams.model.model_name_or_path,
                                                               do_lower_case=self.hparams.model.do_lower_case,
-                                                              cache_dir=self.hparams.model.cache_dir if self.hparams.model.cache_dir
-                                                              else None)
+                                                              cache_dir=self.hparams.model.cache_dir
+                                                              if self.hparams.model.cache_dir else None)
 
         self.model = self.model_class.from_pretrained(self.hparams.model.model_name_or_path,
                                                       from_tf=bool(".ckpt" in self.hparams.model.model_name_or_path),
                                                       config=self.config,
-                                                      cache_dir=self.hparams.model.cache_dir if self.hparams.model.cache_dir else None)
+                                                      cache_dir=self.hparams.model.cache_dir
+                                                      if self.hparams.model.cache_dir else None)
         self.best_model = self.model
 
     def prepare_data(self):
@@ -64,11 +66,11 @@ class PretrainedTransformer(LightningModule):
             train_dataloader = self.train_dataloader()
             # Max number of epochs/steps - secondary parameter
             if self.hparams.exp.max_steps > 0:
-                self.hparams.exp.max_epochs = (
-                            self.hparams.exp.max_steps // (len(train_dataloader) // self.hparams.exp.gradient_accumulation_steps) + 1)
+                self.hparams.exp.max_epochs = (self.hparams.exp.max_steps //
+                                               (len(train_dataloader) // self.hparams.exp.gradient_accumulation_steps) + 1)
             else:
-                self.hparams.exp.max_steps = (
-                            len(train_dataloader) // self.hparams.exp.gradient_accumulation_steps * self.hparams.exp.max_epochs)
+                self.hparams.exp.max_steps = (len(train_dataloader) //
+                                              self.hparams.exp.gradient_accumulation_steps * self.hparams.exp.max_epochs)
 
     def configure_optimizers(self):
         if self.lr is not None:
@@ -259,8 +261,8 @@ class SSLPretrainedTransformer(PretrainedTransformer):
             u_targets = []
             for i in range(len(ul_branches[0][0])):
                 if mask[i]:
-                    nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches) if ind != u_best_branches[i] and
-                                   bool(mask_2d[ind, i])]
+                    nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches)
+                                       if ind != u_best_branches[i] and bool(mask_2d[ind, i])]
                     u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
                     u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
             u_batch = [torch.stack(item) for item in zip(*u_batch)]

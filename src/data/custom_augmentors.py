@@ -14,12 +14,12 @@ class BatchBackTranslationAug:
         self.from_num_beam = from_num_beam
         self.to_num_beam = to_num_beam
         self.from_model = torch.hub.load(github='pytorch/fairseq', model=model_names[0],
-                                    checkpoint_file='model1.pt',
-                                    tokenizer='moses', bpe='fastbpe')
+                                         checkpoint_file='model1.pt',
+                                         tokenizer='moses', bpe='fastbpe')
 
         self.to_model = torch.hub.load(github='pytorch/fairseq', model=model_names[1],
-                                  checkpoint_file='model1.pt',
-                                  tokenizer='moses', bpe='fastbpe')
+                                       checkpoint_file='model1.pt',
+                                       tokenizer='moses', bpe='fastbpe')
 
         self.from_model.cuda(device=device)
         self.to_model.cuda(device=device)
@@ -32,8 +32,9 @@ class BatchBackTranslationAug:
         oom = False
 
         try:
-            for batch_ind in tqdm(range(len(sentences)//batch_size + 1)):
-                inputs = [self.from_model.encode(sample) for sample in sentences[batch_ind*batch_size:(batch_ind+1)*batch_size]]
+            for batch_ind in tqdm(range(len(sentences) // batch_size + 1)):
+                inputs = [self.from_model.encode(sample) for sample in
+                          sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size]]
 
                 dataset = self.from_model.task.build_dataset_for_inference(inputs, [input.numel() for input in inputs])
                 sample = dataset.collater(dataset)
@@ -64,7 +65,7 @@ class BatchBackTranslationAug:
             oom = True
 
         if oom:
-            return self.batch_augments(sentences, batch_size=batch_size//2)
+            return self.batch_augments(sentences, batch_size=batch_size // 2)
 
         return result
 
@@ -91,11 +92,12 @@ class BatchAbstSummAug:
         oom = False
 
         try:
-            for batch_ind in tqdm(range(len(sorted_sentences)//batch_size + 1)):
-                sentence_batch = sorted_sentences[batch_ind*batch_size:(batch_ind+1)*batch_size]
+            for batch_ind in tqdm(range(len(sorted_sentences) // batch_size + 1)):
+                sentence_batch = sorted_sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size]
                 max_len = max(int(self.max_length * min([len(sent) for sent in sentence_batch])), 10)
 
-                token_ids = self.tokenizer([self.text_prefix + sent for sent in sentence_batch], return_tensors='pt', padding=True)
+                token_ids = self.tokenizer([self.text_prefix + sent for sent in sentence_batch], return_tensors='pt',
+                                           padding=True)
                 token_ids['input_ids'] = token_ids['input_ids'].to(self.model.device)
 
                 target_token_ids = self.model.generate(token_ids['input_ids'], min_length=10,
@@ -114,6 +116,6 @@ class BatchAbstSummAug:
             oom = True
 
         if oom:
-            return self.batch_augments(sentences, batch_size=batch_size//2)
+            return self.batch_augments(sentences, batch_size=batch_size // 2)
 
         return result
