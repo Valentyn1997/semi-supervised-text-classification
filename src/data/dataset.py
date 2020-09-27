@@ -1,73 +1,48 @@
 from torch.utils.data import Dataset
 from src.data.processor import convert_examples_to_features
-from typing import List
-import nlpaug.flow as naf
+from typing import List, Dict, Tuple
+from transformers.data.processors import InputFeatures
 import torch
 import math
 from copy import deepcopy
 import numpy as np
-
+from sklearn import preprocessing
+import pandas as pd
 from transformers.data.processors import InputExample
 
 
 class AugmentableTextClassificationDataset(Dataset):
-    def __init__(self, data: List[InputExample], tokenizer, label_list, max_seq_length, model_type,
-                 weak_transform: naf.Pipeline = None, strong_transform: naf.Pipeline = None):
+    def __init__(self, data: List[Tuple[InputFeatures, List[Tuple[str, InputFeatures]]]], n_branches=2):
         self.data = data
-        self.weak_transform = weak_transform
-        self.strong_transform = strong_transform
-        self.tokenizer = tokenizer
-        self.label_list = label_list
-        self.max_seq_length = max_seq_length
-        self.model_type = model_type
+        self.n_branches = n_branches
+        self.aug_encoder = preprocessing.LabelEncoder()
+
+        # Fitting aug_encoder
+        _, example_aug = self.data[0]
+        example_aug = np.array(example_aug)
+        aug_types = np.unique(example_aug[:, 0])
+        self.aug_encoder.fit(aug_types)
 
     def __getitem__(self, index):
-        example = self.data[index]
-        example_copy = deepcopy(example)
+        _, example_aug = self.data[index]
+        example_aug = np.array(example_aug)
+        aug_types = np.unique(example_aug[:, 0])
 
-        # Transformation
-        if self.weak_transform is not None:
-            example.text_a = self.weak_transform.augment(example.text_a)
+        assert self.n_branches <= len(aug_types)
 
-        # Text to features
-        features = convert_examples_to_features(
-            [example],
-            self.tokenizer,
-            label_list=self.label_list,
-            max_length=self.max_seq_length,
-            output_mode='classification',
-            pad_on_left=bool(self.model_type in ["xlnet"]),
-            pad_token=self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if self.model_type in ["xlnet"] else 0,
-        )[0]
+        aug_sample = np.random.choice(aug_types, size=self.n_branches, replace=False)
 
-        # Features to tensors
-        input_ids = torch.tensor(features.input_ids, dtype=torch.long)
-        attention_mask = torch.tensor(features.attention_mask, dtype=torch.long)
-        token_type_ids = torch.tensor(features.token_type_ids, dtype=torch.long)
-        label = torch.tensor(features.label, dtype=torch.long)
+        result = []
+        for aug_name in aug_sample:
+            example = np.random.choice(example_aug[:, 1][example_aug[:, 0] == aug_name])
 
-        if self.strong_transform is not None:
-            example_copy.text_a = self.strong_transform.augment(example_copy.text_a)
-            strong_features = convert_examples_to_features(
-                [example_copy],
-                self.tokenizer,
-                label_list=self.label_list,
-                max_length=self.max_seq_length,
-                output_mode='classification',
-                pad_on_left=bool(self.model_type in ["xlnet"]),
-                pad_token=self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0],
-                pad_token_segment_id=4 if self.model_type in ["xlnet"] else 0,
-            )[0]
-
-            # Features to tensors
-            s_input_ids = torch.tensor(strong_features.input_ids, dtype=torch.long)
-            s_attention_mask = torch.tensor(strong_features.attention_mask, dtype=torch.long)
-            s_token_type_ids = torch.tensor(strong_features.token_type_ids, dtype=torch.long)
-
-            return input_ids, attention_mask, token_type_ids, s_input_ids, s_attention_mask, s_token_type_ids, label
-
-        return input_ids, attention_mask, token_type_ids, label
+            input_ids = torch.tensor(example.input_ids, dtype=torch.long)
+            attention_mask = torch.tensor(example.attention_mask, dtype=torch.long)
+            token_type_ids = torch.tensor(example.token_type_ids, dtype=torch.long)
+            label = torch.tensor(example.label, dtype=torch.long)
+            aug_name_label = torch.tensor(self.aug_encoder.transform([aug_name])[0], dtype=torch.int)
+            result.append((input_ids, attention_mask, token_type_ids, label, aug_name_label))
+        return tuple(result)
 
     def __len__(self):
         return len(self.data)

@@ -25,28 +25,22 @@ data:
 optimizer:
   weight_decay: 0.0  # Weight decay if we apply some
   adam_epsilon: 1e-8  # Epsilon for Adam optimizer
-  learning_rate: 2e-5  # The initial learning rate for Adam
+  lr: 2e-5  # The initial learning rate for Adam
   warmup_steps: 0   # Linear warmup over warmup_steps
   max_grad_norm: 1.0   # Max gradient norm
   auto_lr_find: False  # Auto lr-finding before training
 
 # Experiment
 exp:
-  logging: True   # Logging to MlFlow
-  task_name: SL2  # The name of the task to train selected in the list
+  logging: ???   # Logging to MlFlow
+  task_name: ???  # The name of the task to train selected in the list
   max_steps: -1   # If > 0: set total number of training steps to perform. Override max_epochs
   max_epochs: 1000  # Total number of training epochs to perform.
-  early_stopping_patience: 10  #  Number of epochs to wait for early stopping
+  early_stopping_patience: 1000  #  Number of epochs to wait for early stopping
   gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
   seed: 45  # random seed for initialization
   checkpoint: True  # Saving best model in RAM and then using it for test
   gpus: '-1'
-
-# Additional SSL params
-ssl:
-  mu: 8  # 4 per GPU
-  threshold: 0.8
-  lambda_u: 5.0
 
 # Hydra defaults
 defaults:
