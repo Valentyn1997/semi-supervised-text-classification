@@ -31,7 +31,7 @@ While running scripts, one should indicate the path to dataset. There are two po
 1. **In-topic scenario**. Train/test/validation split is done randomly, without considering the topics. `data.test_id` run argument should be `None` and the files should be structured in the following way:
                       
         ├── data          
-        │   └── <dataset-name>                      <- Dataset name
+        │   ├── <dataset-name>                      <- Dataset name
         |   │   └── in-topic                        <- In-topic setting / this should be passed to data.path argument
         |   |       ├── train.tcv                   <- Train labelled data
         |   |       ├── augmentations_labelled      <- Train labelled data augmentations
@@ -52,7 +52,7 @@ While running scripts, one should indicate the path to dataset. There are two po
 2. **Cross-topic scenario**. For now, possible only for fully-supervised scenario. One should indicate the topic in `data.test_id` run argument, which would be used as a test subset. Train/val splits are done randomly. The dataset structure is following:
 
         ├── data          
-        │   └── <dataset-name>                      <- Dataset name
+        │   ├── <dataset-name>                      <- Dataset name
         |   │   └── cross-topic                     <- Cross-topic setting / this should be passed to data.path argument
         |   |       └── complete.tcv                <- All data together
         ...
