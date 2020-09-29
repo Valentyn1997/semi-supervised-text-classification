@@ -76,5 +76,9 @@ Semi-supervised setting (`config/config.yaml` and `config/setting/ssl.yaml`):
 
 `PYTHONPATH=. python3 runnables/train.py +setting=ssl data.path='data/REVIEWS-clean/in-topic' optimizer.learning_rate=1e-5 exp.task_name=SSL3 exp.logging=True exp.gpus="2" data.load_from_cache=True`
 
+### Experiments with Slurm cluster 
+Look to `scripts/train.sh`:
+
+`sbatch train.sh`
 
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
