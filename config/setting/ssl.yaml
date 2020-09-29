@@ -1,0 +1,13 @@
+setting: ssl
+lightning_module:
+  _target_: src.models.transformers.SSLPretrainedTransformer
+
+# Additional SSL params
+model:
+  mu: 4  # 4 per GPU
+  threshold: 0.8
+  lambda_u: 5.0
+  ul_branches: 3
+
+exp:
+  val_check_interval: 1.0

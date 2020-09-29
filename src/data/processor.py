@@ -1,14 +1,13 @@
 from omegaconf import DictConfig
 import logging
 import os
-from transformers.file_utils import is_tf_available
-from transformers.data.processors import InputExample, InputFeatures, DataProcessor
+from transformers.data.processors import InputFeatures, DataProcessor
 import pandas as pd
 import numpy as np
+import glob
+from tqdm import tqdm
 
 from src import OUTPUT_MODES
-if is_tf_available():
-    import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +15,20 @@ logger = logging.getLogger(__name__)
 class SupervisedTwoLabelProcessor(DataProcessor):
     """Processor for the argument mining supervised data set."""
 
-    def __init__(self):
+    def __init__(self, load_augmentations=True):
         super().__init__()
         self.mask = None  # Used for train/val split for cross-topic setting
+        self.load_augmentations = load_augmentations
 
-    def get_train_examples(self, args: DictConfig):
+    def get_train_examples(self, args: DictConfig):  # train labelled examples
         if args.data.test_id is None:
             df = self.read_tsv(os.path.join(args.data.path, "train.tsv"))
-            return self._create_examples(df)
+            if self.load_augmentations:
+                aug_dfs = self.read_tsvs(f'{args.data.path}/augmentations_labelled')
+                aug_df = pd.concat((aug_df.assign(aug_name=aug_name) for aug_name, aug_df in aug_dfs.items()))
+                return self._create_examples(df, aug_df)
+            else:
+                return self._create_examples(df)
         else:
             df = self.read_tsv(os.path.join(args.data.path, "complete.tsv"))
             df_train_set = df[df["topic"] != args.data.test_id]
@@ -38,7 +43,12 @@ class SupervisedTwoLabelProcessor(DataProcessor):
 
     def get_unlab_examples(self, args: DictConfig):
         df = self.read_tsv(os.path.join(args.data.path, "unlabelled.tsv"))
-        return self._create_examples(df)
+        if self.load_augmentations:
+            aug_dfs = self.read_tsvs(f'{args.data.path}/augmentations_unlabelled')
+            aug_df = pd.concat((aug_df.assign(aug_name=aug_name) for aug_name, aug_df in aug_dfs.items()))
+            return self._create_examples(df, aug_df)
+        else:
+            return self._create_examples(df)
 
     def get_test_examples(self, args: DictConfig):
         if args.data.test_id is None:
@@ -77,18 +87,34 @@ class SupervisedTwoLabelProcessor(DataProcessor):
         return df
 
     @staticmethod
-    def _create_examples(df):
+    def read_tsvs(input_dir):
+        dfs = {}
+        input_files = glob.glob(f'{input_dir}/*')
+        for input_file in input_files:
+            name = input_file.split('/')[-1].split('.')[0]
+            dfs[name] = pd.read_csv(input_file, sep="\t")
+            dfs[name] = dfs[name].replace(np.nan, '', regex=True)
+        return dfs
+
+    @staticmethod
+    def _create_examples(df, aug_df=None):
         """Creates examples for the training and test sets."""
-        examples = []
-        for index, row in df.iterrows():
-            if row["annotation"] == "NoArgument":
-                continue
-            guid = index
-            text_a = row["sentence"]
-            text_b = row["topic"]
-            label = row["annotation"]
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
+        df = df[df['annotation'] != "NoArgument"]
+        if aug_df is not None:
+            aug_df = aug_df[aug_df['id'].isin(df.id)]
+        return df, aug_df
+
+    # @staticmethod
+    # def _create_example(row, aug_df=None):
+    #     guid = row['id']
+    #     text_a = row["sentence"]
+    #     text_b = row["topic"]
+    #     label = row["annotation"]
+    #     if aug_df is not None:
+    #         augmentations = aug_df[aug_df.id == guid]
+    #         return dict(guid=guid, text_a=text_a, text_b=text_b, label=label, augmentations=augmentations)
+    #     else:
+    #         return dict(guid=guid, text_a=text_a, text_b=text_b, label=label)
 
 
 class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
@@ -97,16 +123,9 @@ class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
         return ["Argument_for", "Argument_against", "NoArgument"]
 
     @staticmethod
-    def _create_examples(df):
+    def _create_examples(df, aug_df=None):
         """Creates examples for the training and test sets"""
-        examples = []
-        for index, row in df.iterrows():
-            guid = index
-            text_a = row["sentence"]
-            text_b = row["topic"]
-            label = row["annotation"]
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
+        return df, aug_df
 
 
 PROCESSORS = {
@@ -114,12 +133,14 @@ PROCESSORS = {
     "SL3": SupervisedThreeLabelProcessor,  # fully-supervised setting, 3 labels: "Argument_for", "Argument_against", "NoArgument"
     "SSL2": SupervisedTwoLabelProcessor,  # ssl setting, 2 labels: "Argument_for", "Argument_against" + unlabelled subset
     "SSL3": SupervisedThreeLabelProcessor  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" +
-    # unlabelled subset
 }
 
 
-def convert_examples_to_features(examples, tokenizer, max_length=512, task=None, label_list=None, output_mode=None,
-                                 pad_on_left=False, pad_token=0, pad_token_segment_id=0, mask_padding_with_zero=True):
+def convert_examples_to_features(examples: pd.DataFrame,
+                                 tokenizer, max_length=512,
+                                 task=None, label_list=None, output_mode=None,
+                                 pad_on_left=False, pad_token=0, pad_token_segment_id=0,
+                                 mask_padding_with_zero=True, examples_aug: pd.DataFrame = None) -> dict:
     """
     Loads a data file into a list of ``InputFeatures``
     Args:
@@ -141,10 +162,6 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
         containing the task-specific features. If the input is a list of ``InputExamples``, will return
         a list of task-specific ``InputFeatures`` which can be fed to the model.
     """
-    # is_tf_dataset = False
-    # if is_tf_available() and isinstance(examples, tf.data.Dataset):
-    #     is_tf_dataset = True
-
     if task is not None:
         processor = PROCESSORS[task]()
         if label_list is None:
@@ -157,91 +174,65 @@ def convert_examples_to_features(examples, tokenizer, max_length=512, task=None,
     label_map = {label: i for i, label in enumerate(label_list)}
     label_map['UNL'] = -1
 
-    features = []
-    for (ex_index, example) in enumerate(examples):
-        # if is_tf_dataset:
-        #     example = processor.get_example_from_tensor_dict(example)
-        #     example = processor.tfds_map(example)
-        #     len_examples = tf.data.experimental.cardinality(examples)
-        # else:
-        # len_examples = len(examples)
-        # if ex_index % 10000 == 0:
-        #     logger.info("Writing example %d/%d" % (ex_index, len_examples))
+    features = {}
 
-        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,
-                                       truncation=True)
-        input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
+    # Reduced dataset
+    # examples = examples.head(4000)
+    # if examples_aug is not None:
+    #     examples_aug = examples_aug[examples_aug.id.isin(examples.id)]
 
-        # The mask has 1 for real tokens and 0 for padding tokens. Only real
-        # tokens are attended to.
-        attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+    for (_, example) in tqdm(examples.iterrows(), total=len(examples)):
+        features[example['id']] = preprocess_example(example['sentence'], example['topic'], example['annotation'], tokenizer,
+                                                     mask_padding_with_zero, max_length, pad_on_left,
+                                                     pad_token, pad_token_segment_id, output_mode, label_map)
+    extended_features = {}
+    if examples_aug is not None:
+        grouped_aug = examples_aug.groupby('id')
+        for id, group in tqdm(grouped_aug, total=len(grouped_aug)):
+            features_aug = []
+            for (_, example_aug) in group.iterrows():
+                label = examples[examples.id == id].iloc[0].annotation
+                features_aug.append((example_aug['aug_name'],
+                                    preprocess_example(example_aug['sentence'], '', label,
+                                                       tokenizer, mask_padding_with_zero, max_length, pad_on_left,
+                                                       pad_token, pad_token_segment_id, output_mode, label_map)))
+            extended_features[id] = (features[id], features_aug)
 
-        # Zero-pad up to the sequence length.
-        padding_length = max_length - len(input_ids)
-        if pad_on_left:
-            input_ids = ([pad_token] * padding_length) + input_ids
-            attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
-            token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
-        else:
-            input_ids = input_ids + ([pad_token] * padding_length)
-            attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
-            token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
+        return extended_features
 
-        assert len(input_ids) == max_length, "Error with input length {} vs {}".format(len(input_ids), max_length)
-        assert (len(attention_mask) == max_length), "Error with input length {} vs {}".format(len(attention_mask), max_length)
-        assert (len(token_type_ids) == max_length), "Error with input length {} vs {}".format(len(token_type_ids), max_length)
+    else:
+        return features
 
-        if output_mode == "classification":
-            label = label_map[example.label]
-        elif output_mode == "regression":
-            label = float(example.label)
-        else:
-            raise KeyError(output_mode)
 
-        # if ex_index < 5:
-        #     logger.info("*** Example ***")
-        #     logger.info("guid: %s" % example.guid)
-        #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-        #     logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-        #     logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
-        #     logger.info("label: %s (id = %d)" % (example.label, label))
+def preprocess_example(text_a, text_b, label, tokenizer, mask_padding_with_zero, max_length, pad_on_left, pad_token,
+                       pad_token_segment_id, output_mode, label_map):
+    inputs = tokenizer.encode_plus(text_a, text_b, add_special_tokens=True, max_length=max_length,
+                                   truncation=True)
+    input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
-        features.append(InputFeatures(input_ids=input_ids,
-                                      attention_mask=attention_mask,
-                                      token_type_ids=token_type_ids,
-                                      label=label))
+    # The mask has 1 for real tokens and 0 for padding tokens. Only real
+    # tokens are attended to.
+    attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
 
-    # if is_tf_available() and is_tf_dataset:
-    #
-    #     def gen():
-    #         for ex in features:
-    #             yield (
-    #                 {
-    #                     "input_ids": ex.input_ids,
-    #                     "attention_mask": ex.attention_mask,
-    #                     "token_type_ids": ex.token_type_ids,
-    #                 },
-    #                 ex.label,
-    #             )
-    #
-    #     return tf.data.Dataset.from_generator(
-    #         gen,
-    #         (
-    #             {
-    #                 "input_ids": tf.int32,
-    #                 "attention_mask": tf.int32,
-    #                 "token_type_ids": tf.int32,
-    #             },
-    #             tf.int64,
-    #         ),
-    #         (
-    #             {
-    #                 "input_ids": tf.TensorShape([None]),
-    #                 "attention_mask": tf.TensorShape([None]),
-    #                 "token_type_ids": tf.TensorShape([None]),
-    #             },
-    #             tf.TensorShape([]),
-    #         ),
-    #     )
+    # Zero-pad up to the sequence length.
+    padding_length = max_length - len(input_ids)
+    if pad_on_left:
+        input_ids = ([pad_token] * padding_length) + input_ids
+        attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
+        token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
+    else:
+        input_ids = input_ids + ([pad_token] * padding_length)
+        attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+        token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
 
-    return features
+    assert len(input_ids) == max_length, "Error with input length {} vs {}".format(len(input_ids), max_length)
+    assert (len(attention_mask) == max_length), "Error with input length {} vs {}".format(len(attention_mask), max_length)
+    assert (len(token_type_ids) == max_length), "Error with input length {} vs {}".format(len(token_type_ids), max_length)
+
+    if output_mode == "classification":
+        label = label_map[label]
+    elif output_mode == "regression":
+        label = float(label)
+    else:
+        raise KeyError(output_mode)
+    return InputFeatures(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, label=label)

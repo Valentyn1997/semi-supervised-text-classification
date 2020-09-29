@@ -1,0 +1,10 @@
+setting: supervised
+lightning_module:
+  _target_: src.models.transformers.PretrainedTransformer
+
+# Additional supervised params
+data:
+  augment: True
+
+exp:
+  val_check_interval: 0.5
