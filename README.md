@@ -47,7 +47,7 @@ While running scripts, one should indicate the path to dataset. There are two po
         |   |       └── val.tcv                     <- Val data
         ...
 
-    To generate augmentations look to [Offline augmentations](#Offline augmentations) section.
+    To generate augmentations look to [Offline augmentations](### Offline augmentations) section.
 
 2. **Cross-topic scenario**. For now, possible only for fully-supervised scenario. One should indicate the topic in `data.test_id` run argument, which would be used as a test subset. Train/val splits are done randomly. The dataset structure is following:
 
