@@ -1,4 +1,6 @@
 from src import ROOT_PATH, RESOURCES_PATH
+from os import mkdir
+from os.path import exists
 
 import pandas as pd
 import torch
@@ -19,6 +21,9 @@ OUT_PATH = {
     'labelled': f'{DATA_PATH}/augmentations_labelled',
     'unlabelled': f'{DATA_PATH}/augmentations_unlabelled'
 }
+for out_path in OUT_PATH.values():
+    mkdir(out_path) if not exists(DATA_PATH) else None
+
 original_dfs = {
     'labelled': pd.read_csv(f'{DATA_PATH}/train.tsv', sep='\t'),
     'unlabelled': pd.read_csv(f'{DATA_PATH}/unlabelled.tsv', sep='\t')
@@ -106,4 +111,4 @@ for source in ['unlabelled']:
                                                               columns=['sentence'], index=original_dfs[source].id)
 
     augmented_df = pd.concat(augmented_df, keys=augmented_df.keys(), names=['n', 'params']).reset_index()
-    augmented_df.to_csv(f'{OUT_PATH[source]}/{Augmentation.__name__}.tsv', sep='\t', index=False, )
+    augmented_df.to_csv(f'{OUT_PATH[source]}/{Augmentation.__name__}.tsv', sep='\t', index=False)
