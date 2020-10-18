@@ -14,7 +14,7 @@ pip install virtualenv
 virtualenv venv
 source venv/bin/activate
 ```
-2. `pip3 install -r requirements.txt`
+3. `pip3 install -r requirements.txt`
 
 ## MlFlow Server
 One can either run their own mlflow server:
