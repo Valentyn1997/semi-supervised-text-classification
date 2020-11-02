@@ -5,9 +5,9 @@ lightning_module:
 # Additional SSL params
 model:
   mu: 4  # 4 per GPU
-  threshold: 0.8
-  lambda_u: 5.0
-  ul_branches: 3
+  threshold: 0.95
+  lambda_u: 1.0
+  ul_branches: 4
 
 exp:
   val_check_interval: 1.0

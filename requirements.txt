@@ -15,3 +15,4 @@ nlpaug
 nltk
 fairseq
 fastBPE
+baal

@@ -32,8 +32,10 @@ original_dfs = {
 # Params
 # Augmentation = naw.WordEmbsAug
 # Augmentation = nas.AbstSummAug
-Augmentation = BatchAbstSummAug
+# Augmentation = BatchAbstSummAug
 # Augmentation = naw.SynonymAug
+# Augmentation = naw.ContextualWordEmbsAug
+Augmentation = nas.ContextualWordEmbsForSentenceAug
 
 configs = {
     'BatchBackTranslationAug': {
@@ -85,7 +87,32 @@ configs = {
             'max_length': [0.2, 0.5, 0.8],
         },
         'type': 'batch',
-    }
+    },
+    'ContextualWordEmbsAug': {
+        'n_times': {
+            'labelled': 10,
+            'unlabelled': 1
+        },
+        'conf': {
+            'model_path': ['bert-base-uncased', 'xlnet-base-cased'],
+            'top_k': [50],
+            'aug_p': [0.3],
+            'action': ['substitute']
+        },
+        'type': 'single',
+    },
+    'ContextualWordEmbsForSentenceAug': {
+            'n_times': {
+                'labelled': 10,
+                'unlabelled': 1
+            },
+            'conf': {
+                'model_path': ['gpt2', 'xlnet-base-cased'],
+                'top_k': [50],
+            },
+            'type': 'single',
+        },
+
 }
 
 print(Augmentation.__name__)
@@ -94,7 +121,7 @@ configs_list = [dict(zip(configs[Augmentation.__name__]['conf'].keys(), values))
 print(configs_list)
 
 # Augmenting data
-for source in ['unlabelled']:
+for source in ['labelled']:
     augmented_df = {}
     for i in tqdm(range(configs[Augmentation.__name__]['n_times'][source])):
         for config in tqdm(configs_list, total=len(configs_list)):

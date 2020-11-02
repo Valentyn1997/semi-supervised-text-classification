@@ -36,6 +36,7 @@ def main(args: DictConfig):
     # Load pretrained model and tokenizer
     set_seed(args)
     model = instantiate(args.lightning_module, args=args)
+    logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Early stopping & Checkpointing
     early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.00, patience=args.exp.early_stopping_patience,
@@ -43,7 +44,6 @@ def main(args: DictConfig):
     checkpoint_callback = CustomModelCheckpoint(model=model, verbose=True, monitor='val_loss', mode='min', save_top_k=1,
                                                 period=0 if args.exp.val_check_interval < 1.0 else 1)
 
-    logger.info(f'Run arguments: \n{args.pretty()}')
 
     # Training
     trainer = Trainer(gpus=eval(str(args.exp.gpus)),
