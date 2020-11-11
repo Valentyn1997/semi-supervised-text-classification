@@ -51,10 +51,19 @@ class PretrainedTransformer(LightningModule):
                                                       cache_dir=self.hparams.model.cache_dir
                                                       if self.hparams.model.cache_dir else None)
         self.best_model = self.model
+        self.cross_entropy_weights = None
 
     def prepare_data(self):
         if 'data_size' not in self.hparams.data:
             self.train_dataset = self.load_and_cache_examples(mode='train')
+            if self.hparams.model.weighted_cross_entropy:
+                if isinstance(self.train_dataset, TensorDataset):
+                    class_counts = torch.bincount(self.train_dataset.tensors[3])
+                else:
+                    class_counts = torch.bincount(torch.tensor([datapoint[0].label for datapoint in self.train_dataset.data]))
+                inv_class_freq = float(len(self.train_dataset)) / class_counts.float()
+                self.cross_entropy_weights = inv_class_freq / inv_class_freq.sum()
+
             self.test_dataset = self.load_and_cache_examples(mode='test')
             self.val_dataset = self.load_and_cache_examples(mode='val')
             self.hparams.data.data_size = DictConfig({
@@ -119,7 +128,7 @@ class PretrainedTransformer(LightningModule):
             batch = batch[0]
         logits = self(batch)
         labels = batch[3]
-        loss = F.cross_entropy(logits, labels)
+        loss = F.cross_entropy(logits, labels, weight=self.cross_entropy_weights.type_as(logits))
         return {'loss': loss}
 
     def training_epoch_end(self, outputs):
@@ -239,7 +248,7 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         # Supervised loss
         l_logits = self(l_batch)
         l_labels = l_batch[3]
-        l_loss = F.cross_entropy(l_logits, l_labels, reduction='mean')
+        l_loss = F.cross_entropy(l_logits, l_labels, reduction='mean', weight=self.cross_entropy_weights.type_as(l_logits))
 
         # Unsupervised loss
         # Choosing pseudo-labels and branches to back-propagate
@@ -270,7 +279,7 @@ class SSLPretrainedTransformer(PretrainedTransformer):
 
             # Unlabelled loss
             u_logits = self(u_batch)
-            u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean')
+            u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
 
         # Train loss / labelled accuracy
         loss = l_loss + self.hparams.model.lambda_u * u_loss

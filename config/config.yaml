@@ -6,6 +6,7 @@ model: # Model params
   tokenizer_name: ${model.model_name_or_path} # Pre-trained tokenizer name or path if not the same as model_name
   cache_dir: # Where do you want to store the pre-trained models downloaded from s3
   do_lower_case: True  # Set this flag if you are using an uncased model
+  weighted_cross_entropy: True  # Use class distribution to weight CE
 
 # Data params
 data:
