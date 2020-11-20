@@ -14,7 +14,7 @@ pip install virtualenv
 virtualenv venv
 source venv/bin/activate
 ```
-2. `pip3 install -r requirements.txt`
+3. `pip3 install -r requirements.txt`
 
 ## MlFlow Server
 One can either run their own mlflow server:
@@ -68,13 +68,13 @@ All the configurations are in the .yaml format and could be found in the `config
 
 Fully-supervised experiments (`config/config.yaml` and `config/setting/supervised.yaml`):
 
-`PYTHONPATH=. python3 runnables/train.py -m +setting=supervised data.path='data/REVIEWS-clean/in-topic' optimizer.learning_rate=1e-5,1e-6 exp.task_name=SL3 exp.gpus='[0]' optimizer.auto_lr_find=False exp.logging=True exp.early_stopping_patience=10`
+`PYTHONPATH=. python3 runnables/train.py -m +setting=supervised data.path='data/REVIEWS-clean/in-topic' optimizer.lr=1e-5,1e-6 exp.task_name=SL3 exp.gpus='[0]' optimizer.auto_lr_find=False exp.logging=True exp.early_stopping_patience=10`
 
-`PYTHONPATH=. python3 runnables/train.py -m +setting=supervised data.path='data/UKP-clean/in-topic' optimizer.learning_rate=1e-5,1e-6 exp.task_name=SL2 exp.logging=True`
+`PYTHONPATH=. python3 runnables/train.py -m +setting=supervised data.path='data/UKP-clean/in-topic' optimizer.lr=1e-5,1e-6 exp.task_name=SL2 exp.logging=True`
 
 Semi-supervised setting (`config/config.yaml` and `config/setting/ssl.yaml`):
 
-`PYTHONPATH=. python3 runnables/train.py +setting=ssl data.path='data/REVIEWS-clean/in-topic' optimizer.learning_rate=1e-5 exp.task_name=SSL3 exp.logging=True exp.gpus="2" data.load_from_cache=True`
+`PYTHONPATH=. python3 runnables/train.py +setting=ssl data.path='data/REVIEWS-clean/in-topic' optimizer.lr=1e-5 exp.task_name=SSL3 exp.logging=True exp.gpus="2" data.load_from_cache=True`
 
 ### Experiments with Slurm cluster 
 Look to `scripts/train.sh`:
