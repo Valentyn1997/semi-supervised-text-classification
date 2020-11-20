@@ -4,10 +4,11 @@ lightning_module:
 
 # Additional SSL params
 model:
-  mu: 4  # 4 per GPU
-  threshold: 0.8
-  lambda_u: 5.0
-  ul_branches: 3
+  mu: 8  # 4 per GPU
+  threshold: 0.95
+  lambda_u: 1.0
+  ul_branches: 6
+  max_ul_batch_size_per_gpu: 65  # taking full ul_batch, if max_ul_batch_size_per_gpu = mu * train.batch_size *  (ul_branches - 1) / n_gpus
 
 exp:
   val_check_interval: 1.0

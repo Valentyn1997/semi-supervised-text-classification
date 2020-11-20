@@ -1,10 +1,12 @@
 import logging
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import f1_score
-import torch
+import hashlib
+from copy import deepcopy
 import random
 import numpy as np
 from omegaconf import DictConfig
+import torch
 
 
 logger = logging.getLogger(__name__)
@@ -19,13 +21,15 @@ def set_seed(args: DictConfig):
 
 
 def simple_accuracy(preds, labels):
-    return (preds == labels).mean()
+    return (preds == labels).float().mean()
 
 
 def acc_and_f1(preds, labels, prefix):
     acc = simple_accuracy(preds, labels)
-    f1_macro = f1_score(y_true=labels, y_pred=preds, average="macro")
-    f1_micro = f1_score(y_true=labels, y_pred=preds, average="micro")
+    f1_macro = torch.tensor(f1_score(y_true=labels.cpu().numpy(), y_pred=preds.cpu().numpy(), average="macro"),
+                            device=preds.device)
+    f1_micro = torch.tensor(f1_score(y_true=labels.cpu().numpy(), y_pred=preds.cpu().numpy(), average="micro"),
+                            device=preds.device)
     return {
         prefix + '_acc': acc,
         prefix + '_f1_macro': f1_macro,
@@ -44,9 +48,7 @@ def pearson_and_spearman(preds, labels):
     }
 
 
-# def compute_metrics(task_name, preds, labels):
-#     assert len(preds) == len(labels)
-#     if task_name == "SD":
-#         return acc_and_f1(preds, labels)
-#     else:
-#         raise KeyError(task_name)
+def calculate_hash(args: DictConfig):
+    args_copy = deepcopy(args)
+    args_copy.data.pop('path')
+    return hashlib.md5(str(args_copy).encode()).hexdigest()
