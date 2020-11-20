@@ -34,14 +34,16 @@ optimizer:
 # Experiment
 exp:
   logging: ???   # Logging to MlFlow
+  check_exisisting_hash: False  # Used for multi-run hparam search
   task_name: ???  # The name of the task to train selected in the list
   max_steps: -1   # If > 0: set total number of training steps to perform. Override max_epochs
   max_epochs: 500  # Total number of training epochs to perform.
-  early_stopping_patience: 500  #  Number of epochs to wait for early stopping
+  early_stopping_patience: 50  #  Number of epochs to wait for early stopping
   gradient_accumulation_steps: 1  # Number of updates steps to accumulate before performing a backward/update pass
   seed: 45  # random seed for initialization
   checkpoint: True  # Saving best model in RAM and then using it for test
   gpus: '-1'
+  precision: 32  # 16 / 32
 
 # Hydra defaults
 defaults:
