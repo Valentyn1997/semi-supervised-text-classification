@@ -1,13 +1,13 @@
 scikit-learn
 tensorflow
 omegaconf
-transformers
+transformers>=3.5.1
 flake8
 
 hydra-core
 mlflow
 pytorch-lightning==0.9.0
-torch
+torch==1.6.0
 matplotlib
 hydra_colorlog
 

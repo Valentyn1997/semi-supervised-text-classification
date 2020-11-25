@@ -34,13 +34,13 @@ def main(args: DictConfig):
     if args.exp.logging:
         experiment_name = f'{dataset_name}/{args.setting}-{args.data.setting}/{args.exp.task_name}'
         mlf_logger = MLFlowLogger(experiment_name=experiment_name, tracking_uri=MLFLOW_URI)
-        experiment_id = mlf_logger.experiment.get_experiment_by_name(experiment_name).experiment_id
+        experiment_id = mlf_logger._mlflow_client.get_experiment_by_name(experiment_name).experiment_id
 
         if args.exp.check_exisisting_hash:
             args.hash = calculate_hash(args)
-            existing_runs = mlf_logger.experiment.search_runs(filter_string=f"params.hash = '{args.hash}'",
-                                                              run_view_type=mlflow.tracking.client.ViewType.ACTIVE_ONLY,
-                                                              experiment_ids=[experiment_id])
+            existing_runs = mlf_logger._mlflow_client.search_runs(filter_string=f"params.hash = '{args.hash}'",
+                                                                  run_view_type=mlflow.tracking.client.ViewType.ACTIVE_ONLY,
+                                                                  experiment_ids=[experiment_id])
             if len(existing_runs) > 0:
                 logger.info('Skipping existing run.')
                 return

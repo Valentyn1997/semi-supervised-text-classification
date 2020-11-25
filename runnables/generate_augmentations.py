@@ -3,12 +3,9 @@ from os import mkdir
 from os.path import exists
 
 import pandas as pd
-import torch
-import gc
-import nlpaug.flow as naf
-import nlpaug.augmenter.char as nac
 import nlpaug.augmenter.word as naw
 import nlpaug.augmenter.sentence as nas
+from transformers import AutoTokenizer
 from src.data.custom_augmentors import BatchBackTranslationAug, BatchAbstSummAug
 
 import itertools
@@ -16,26 +13,28 @@ from tqdm import tqdm
 tqdm.pandas()
 
 # Reading data
-DATA_PATH = f'{ROOT_PATH}/data/REVIEWS-clean/in-topic'
+DATA_PATH = f'{ROOT_PATH}/data/IMDB-clean'
 OUT_PATH = {
     'labelled': f'{DATA_PATH}/augmentations_labelled',
     'unlabelled': f'{DATA_PATH}/augmentations_unlabelled'
 }
 for out_path in OUT_PATH.values():
-    mkdir(out_path) if not exists(DATA_PATH) else None
+    mkdir(out_path) if not exists(out_path) else None
 
 original_dfs = {
     'labelled': pd.read_csv(f'{DATA_PATH}/train.tsv', sep='\t'),
     'unlabelled': pd.read_csv(f'{DATA_PATH}/unlabelled.tsv', sep='\t')
 }
 
-# Params
-# Augmentation = naw.WordEmbsAug
-# Augmentation = nas.AbstSummAug
-# Augmentation = BatchAbstSummAug
-# Augmentation = naw.SynonymAug
-# Augmentation = naw.ContextualWordEmbsAug
-Augmentation = nas.ContextualWordEmbsForSentenceAug
+# Params,
+augmentation_list = [
+    naw.WordEmbsAug,
+    BatchBackTranslationAug,
+    BatchAbstSummAug,
+    naw.SynonymAug,
+    naw.ContextualWordEmbsAug,
+    nas.ContextualWordEmbsForSentenceAug
+]
 
 configs = {
     'BatchBackTranslationAug': {
@@ -115,27 +114,29 @@ configs = {
 
 }
 
-print(Augmentation.__name__)
-configs_list = [dict(zip(configs[Augmentation.__name__]['conf'].keys(), values))
-                for values in itertools.product(*configs[Augmentation.__name__]['conf'].values())]
-print(configs_list)
+for Augmentation in augmentation_list:
+    print(Augmentation.__name__)
+    configs_list = [dict(zip(configs[Augmentation.__name__]['conf'].keys(), values))
+                    for values in itertools.product(*configs[Augmentation.__name__]['conf'].values())]
+    print(configs_list)
 
-# Augmenting data
-for source in ['unlabelled']:
-    augmented_df = {}
-    for i in tqdm(range(configs[Augmentation.__name__]['n_times'][source])):
-        for config in tqdm(configs_list, total=len(configs_list)):
-            aug = Augmentation(**config)
+    # Augmenting data
+    for source in ['unlabelled']:
+        augmented_df = {}
+        for i in tqdm(range(configs[Augmentation.__name__]['n_times'][source])):
+            for config in tqdm(configs_list, total=len(configs_list)):
+                aug = Augmentation(**config)
 
-            if configs[Augmentation.__name__]['type'] == 'parallel':
-                augmented_df[(i, str(config))] = pd.DataFrame(aug.augments(list(original_dfs[source].sentence), num_thread=10),
-                                                              columns=['sentence'], index=original_dfs[source].id)
-            elif configs[Augmentation.__name__]['type'] == 'single':
-                augmented_df[(i, str(config))] = pd.DataFrame(list(original_dfs[source].sentence.apply(aug.augment)),
-                                                              columns=['sentence'], index=original_dfs[source].id)
-            elif configs[Augmentation.__name__]['type'] == 'batch':
-                augmented_df[(i, str(config))] = pd.DataFrame(aug.batch_augments(list(original_dfs[source].sentence)),
-                                                              columns=['sentence'], index=original_dfs[source].id)
+                if configs[Augmentation.__name__]['type'] == 'parallel':
+                    augmented_df[(i, str(config))] = pd.DataFrame(aug.augment(list(original_dfs[source].sentence),
+                                                                               num_thread=10),
+                                                                  columns=['sentence'], index=original_dfs[source].id)
+                elif configs[Augmentation.__name__]['type'] == 'single':
+                    augmented_df[(i, str(config))] = pd.DataFrame(list(original_dfs[source].sentence.apply(aug.augment)),
+                                                                  columns=['sentence'], index=original_dfs[source].id)
+                elif configs[Augmentation.__name__]['type'] == 'batch':
+                    augmented_df[(i, str(config))] = pd.DataFrame(aug.batch_augments(list(original_dfs[source].sentence)),
+                                                                  columns=['sentence'], index=original_dfs[source].id)
 
-    augmented_df = pd.concat(augmented_df, keys=augmented_df.keys(), names=['n', 'params']).reset_index()
-    augmented_df.to_csv(f'{OUT_PATH[source]}/{Augmentation.__name__}.tsv', sep='\t', index=False)
+        augmented_df = pd.concat(augmented_df, keys=augmented_df.keys(), names=['n', 'params']).reset_index()
+        augmented_df.to_csv(f'{OUT_PATH[source]}/{Augmentation.__name__}.tsv', sep='\t', index=False)
