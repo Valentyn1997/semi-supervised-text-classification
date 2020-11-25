@@ -1,3 +1,4 @@
+# @package _global_
 setting: ssl
 lightning_module:
   _target_: src.models.transformers.SSLPretrainedTransformer
