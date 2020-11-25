@@ -13,3 +13,4 @@ model:
 
 exp:
   val_check_interval: 1.0
+  tsa: True  # Training signal annealing

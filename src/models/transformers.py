@@ -10,7 +10,7 @@ from pytorch_lightning.core.step_result import TrainResult, EvalResult
 from src import MODEL_CLASSES, OUTPUT_MODES
 from src.data.processor import PROCESSORS, convert_examples_to_features
 from src.data.dataset import AugmentableTextClassificationDataset, FixMatchCompositeTrainDataset
-from src.utils import acc_and_f1
+from src.utils import acc_and_f1, TrainingSignalAnnealing
 from torch.utils.data import TensorDataset, DataLoader
 
 logger = logging.getLogger(__name__)
@@ -55,17 +55,21 @@ class PretrainedTransformer(LightningModule):
     def prepare_data(self):
         if 'data_size' not in self.hparams.data:
             self.train_dataset = self.load_and_cache_examples(mode='train')
+
+            # Targets count
+            if isinstance(self.train_dataset, TensorDataset):
+                labels = self.train_dataset.tensors[3]
+            elif isinstance(self.train_dataset, AugmentableTextClassificationDataset):
+                labels = torch.tensor([datapoint[0].label for datapoint in self.train_dataset.data])
+            elif isinstance(self.train_dataset, FixMatchCompositeTrainDataset):
+                labels = torch.tensor([datapoint[0].label for datapoint in self.train_dataset.l_dataset.data])
+            else:
+                raise NotImplementedError()
+            self.class_counts = torch.bincount(labels)
+
+            # Weighted cross-entropy
             if self.hparams.model.weighted_cross_entropy:
-                if isinstance(self.train_dataset, TensorDataset):
-                    labels = self.train_dataset.tensors[3]
-                elif isinstance(self.train_dataset, AugmentableTextClassificationDataset):
-                    labels = torch.tensor([datapoint[0].label for datapoint in self.train_dataset.data])
-                elif isinstance(self.train_dataset, FixMatchCompositeTrainDataset):
-                    labels = torch.tensor([datapoint[0].label for datapoint in self.train_dataset.l_dataset.data])
-                else:
-                    raise NotImplementedError()
-                class_counts = torch.bincount(labels)
-                inv_class_freq = float(len(self.train_dataset)) / class_counts.float()
+                inv_class_freq = float(len(self.train_dataset)) / self.class_counts.float()
                 self.cross_entropy_weights = inv_class_freq / inv_class_freq.sum()
 
             self.test_dataset = self.load_and_cache_examples(mode='test')
@@ -232,6 +236,14 @@ class SSLPretrainedTransformer(PretrainedTransformer):
             'test': len(self.test_dataset)
         })
 
+        if self.hparams.exp.tsa:
+            self.tsa = TrainingSignalAnnealing(len(self.class_counts), self.hparams.exp.max_steps)
+
+    def optimizer_step(self, *args, **kwargs) -> None:
+        super().optimizer_step(*args, **kwargs)
+        if self.hparams.exp.tsa:
+            self.tsa.step()
+
     def training_step(self, composite_batch, batch_idx):
         # Batch collation
         l_batch = composite_batch[0][0][0]
@@ -240,7 +252,13 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         # Supervised loss
         l_logits = self(l_batch)
         l_labels = l_batch[3]
-        l_loss = F.cross_entropy(l_logits, l_labels, reduction='mean', weight=self.cross_entropy_weights.type_as(l_logits))
+        if self.hparams.exp.tsa:
+            l_scores = torch.softmax(l_logits.detach(), dim=-1)
+            l_max_probs, l_preds = torch.max(l_scores, dim=-1)
+            l_mask = (l_max_probs.le(self.tsa.threshold) | (l_labels != l_preds)).float()
+            l_loss = (F.cross_entropy(l_logits, l_labels, reduction='none') * l_mask).mean()
+        else:
+            l_loss = F.cross_entropy(l_logits, l_labels, reduction='mean', weight=self.cross_entropy_weights.type_as(l_logits))
 
         # Unsupervised loss
         # Choosing pseudo-labels and branches to back-propagate
@@ -251,20 +269,20 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_logits = self(ul_branch)
                 pseudo_labels = torch.softmax(u_logits.detach(), dim=-1)
                 u_max_probs_2d[i], u_targets_2d[i] = torch.max(pseudo_labels, dim=-1)
-        mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
-        mask = (mask_2d.sum(dim=0) > 0)  # Threshold mask per instance, at least one branch should pass the threshold
+        u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
+        u_mask = (u_mask_2d.sum(dim=0) > 0)  # Threshold u_mask per instance, at least one branch should pass the threshold
         u_max_probs, u_best_branches = torch.max(u_max_probs_2d, dim=0)
 
         u_loss = torch.tensor(0.0).type_as(l_loss)
-        if mask.int().sum() > 0:
+        if u_mask.int().sum() > 0:
             # Creating one batch for unlabelled loss
             u_batch = []
             u_targets = []
             for i in range(len(ul_branches[0][0])):
-                if mask[i]:
+                if u_mask[i]:
                     nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches)
                                        if ind != u_best_branches[i]
-                                       # and bool(mask_2d[ind, i])
+                                       # and bool(u_mask_2d[ind, i])
                                        ]
                     u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
                     u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
@@ -288,7 +306,9 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         result.log('train_loss', loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_loss_l', l_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_loss_ul', u_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
-        result.log('train_mean_mask', mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
+        result.log('train_u_mask', u_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
+        if self.hparams.exp.tsa:
+            result.log('train_l_mask', l_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         result.log_dict(self.calculate_metrics(l_logits.detach(), l_labels, prefix='train'),
                         on_epoch=True, on_step=False, sync_dist=True)
         return result
