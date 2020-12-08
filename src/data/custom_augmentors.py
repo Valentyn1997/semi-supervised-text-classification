@@ -10,7 +10,7 @@ from nlpaug.model.lang_models import XlNet, Gpt2
 
 class BatchBackTranslationAug:
 
-    def __init__(self, model_names, from_num_beam=5, to_num_beam=5, device='cuda:0'):
+    def __init__(self, model_names, from_num_beam=5, to_num_beam=5, device='cuda'):
 
         self.from_num_beam = from_num_beam
         self.to_num_beam = to_num_beam
@@ -25,40 +25,45 @@ class BatchBackTranslationAug:
         self.from_model.cuda(device=device)
         self.to_model.cuda(device=device)
 
-    def batch_augments(self, sentences, batch_size=50):
+    def batch_augments(self, sentences, batch_size=30, progress_bar=True):
         self.from_model.eval()
         self.to_model.eval()
 
         result = []
         oom = False
+        batch_ind = 0
+
+        iterator = tqdm(range(len(sentences) // batch_size + 1)) if progress_bar else range(len(sentences) // batch_size + 1)
 
         try:
-            for batch_ind in tqdm(range(len(sentences) // batch_size + 1)):
+            for batch_ind in iterator:
                 inputs = [self.from_model.encode(sample) for sample in
                           sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size]]
 
-                dataset = self.from_model.task.build_dataset_for_inference(inputs, [input.numel() for input in inputs])
-                sample = dataset.collater(dataset)
-                sample = utils.apply_to_sample(lambda tensor: tensor.to(self.from_model.device), sample)
-                gen_args = copy.copy(self.from_model.args)
-                gen_args.beam = self.from_num_beam
-                generator = self.from_model.task.build_generator(self.from_model.models, args=gen_args)
-                translations = self.from_model.task.inference_step(generator, self.from_model.models, sample)
-                translations = [self.from_model.decode(tr[0]['tokens']) for tr in translations]
-                translations = [translations[sample['id'].tolist().index(i)] for i in range(len(translations))]
+                if len(inputs) > 0:
 
-                translations = [self.to_model.encode(sample) for sample in translations]
-                dataset = self.to_model.task.build_dataset_for_inference(translations, [input.numel() for input in translations])
-                sample = dataset.collater(dataset)
-                sample = utils.apply_to_sample(lambda tensor: tensor.to(self.to_model.device), sample)
-                gen_args = copy.copy(self.to_model.args)
-                gen_args.beam = self.to_num_beam
-                generator = self.to_model.task.build_generator(self.to_model.models, args=gen_args)
-                back_translations = self.to_model.task.inference_step(generator, self.to_model.models, sample)
-                back_translations = [self.to_model.decode(tr[0]['tokens']) for tr in back_translations]
-                back_translations = [back_translations[sample['id'].tolist().index(i)] for i in range(len(back_translations))]
+                    dataset = self.from_model.task.build_dataset_for_inference(inputs, [input.numel() for input in inputs])
+                    sample = dataset.collater(dataset)
+                    sample = utils.apply_to_sample(lambda tensor: tensor.to(self.from_model.device), sample)
+                    gen_args = copy.copy(self.from_model.args)
+                    gen_args.beam = self.from_num_beam
+                    generator = self.from_model.task.build_generator(self.from_model.models, args=gen_args)
+                    translations = self.from_model.task.inference_step(generator, self.from_model.models, sample)
+                    translations = [self.from_model.decode(tr[0]['tokens']) for tr in translations]
+                    translations = [translations[sample['id'].tolist().index(i)] for i in range(len(translations))]
 
-                result.extend(back_translations)
+                    translations = [self.to_model.encode(sample) for sample in translations]
+                    dataset = self.to_model.task.build_dataset_for_inference(translations, [input.numel() for input in translations])
+                    sample = dataset.collater(dataset)
+                    sample = utils.apply_to_sample(lambda tensor: tensor.to(self.to_model.device), sample)
+                    gen_args = copy.copy(self.to_model.args)
+                    gen_args.beam = self.to_num_beam
+                    generator = self.to_model.task.build_generator(self.to_model.models, args=gen_args)
+                    back_translations = self.to_model.task.inference_step(generator, self.to_model.models, sample)
+                    back_translations = [self.to_model.decode(tr[0]['tokens']) for tr in back_translations]
+                    back_translations = [back_translations[sample['id'].tolist().index(i)] for i in range(len(back_translations))]
+
+                    result.extend(back_translations)
 
         except RuntimeError:
             torch.cuda.empty_cache()
@@ -66,14 +71,18 @@ class BatchBackTranslationAug:
             oom = True
 
         if oom:
-            return self.batch_augments(sentences, batch_size=batch_size // 2)
+            result.extend(self.batch_augments(sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size],
+                                              batch_size=batch_size // 2, progress_bar=False))
+
+            result.extend(self.batch_augments(sentences[(batch_ind + 1) * batch_size:],
+                                              batch_size=batch_size))
 
         return result
 
 
 class BatchAbstSummAug:
 
-    def __init__(self, model_path, max_length, num_beam=3, device='cuda:0'):
+    def __init__(self, model_path, max_length, num_beam=100, device='cuda'):
 
         self.num_beam = num_beam
         self.max_length = max_length
@@ -84,16 +93,20 @@ class BatchAbstSummAug:
         self.text_prefix = 'summarize: '
         self.model.to(device)
 
-    def batch_augments(self, sentences, batch_size=25):
+    def batch_augments(self, sentences, batch_size=30, progress_bar=True):
         self.model.eval()
         order = np.argsort([len(sent) for sent in sentences])
         sorted_sentences = np.array(sentences)[order]
 
         result = []
         oom = False
+        batch_ind = 0
+
+        iterator = tqdm(range(len(sorted_sentences) // batch_size + 1)) if progress_bar \
+            else range(len(sorted_sentences) // batch_size + 1)
 
         try:
-            for batch_ind in tqdm(range(len(sorted_sentences) // batch_size + 1)):
+            for batch_ind in iterator:
                 sentence_batch = sorted_sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size]
                 if len(sentence_batch) > 0:
                     max_len = max(int(self.max_length * min([len(sent) for sent in sentence_batch])), 10)
@@ -119,7 +132,13 @@ class BatchAbstSummAug:
             oom = True
 
         if oom:
-            return self.batch_augments(sentences, batch_size=batch_size // 2)
+            result.extend(self.batch_augments(sorted_sentences[batch_ind * batch_size:(batch_ind + 1) * batch_size],
+                                              batch_size=batch_size // 2, progress_bar=False))
+
+            result.extend(self.batch_augments(sorted_sentences[(batch_ind + 1) * batch_size:],
+                                              batch_size=batch_size))
+
+            result = [result[list(order).index(i)] for i in range(len(result))]
 
         return result
 

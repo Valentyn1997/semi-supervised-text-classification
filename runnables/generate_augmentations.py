@@ -28,7 +28,7 @@ original_dfs = {
 
 # Params,
 augmentation_list = [
-    naw.WordEmbsAug,
+    # naw.WordEmbsAug,
     BatchBackTranslationAug,
     BatchAbstSummAug,
     naw.SynonymAug,
@@ -123,8 +123,8 @@ for Augmentation in augmentation_list:
     # Augmenting data
     for source in ['unlabelled']:
         augmented_df = {}
-        for i in tqdm(range(configs[Augmentation.__name__]['n_times'][source])):
-            for config in tqdm(configs_list, total=len(configs_list)):
+        for i in (range(configs[Augmentation.__name__]['n_times'][source])):
+            for config in configs_list:
                 aug = Augmentation(**config)
 
                 if configs[Augmentation.__name__]['type'] == 'parallel':
