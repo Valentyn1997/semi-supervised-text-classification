@@ -21,6 +21,8 @@ OUT_PATH = {
 for out_path in OUT_PATH.values():
     mkdir(out_path) if not exists(out_path) else None
 
+print(f'Reading original data from {DATA_PATH}')
+
 original_dfs = {
     'labelled': pd.read_csv(f'{DATA_PATH}/train.tsv', sep='\t'),
     'unlabelled': pd.read_csv(f'{DATA_PATH}/unlabelled.tsv', sep='\t')
@@ -28,9 +30,9 @@ original_dfs = {
 
 # Params,
 augmentation_list = [
-    naw.WordEmbsAug,
-    BatchBackTranslationAug,
-    BatchAbstSummAug,
+    # naw.WordEmbsAug,
+    # BatchBackTranslationAug,
+    # BatchAbstSummAug,
     naw.SynonymAug,
     naw.ContextualWordEmbsAug,
     nas.ContextualWordEmbsForSentenceAug
@@ -123,8 +125,9 @@ for Augmentation in augmentation_list:
     # Augmenting data
     for source in ['unlabelled']:
         augmented_df = {}
-        for i in tqdm(range(configs[Augmentation.__name__]['n_times'][source])):
-            for config in tqdm(configs_list, total=len(configs_list)):
+        original_dfs[source]['sentence'] = original_dfs[source].sentence.astype(str).str.replace('\D+', '')
+        for i in (range(configs[Augmentation.__name__]['n_times'][source])):
+            for config in configs_list:
                 aug = Augmentation(**config)
 
                 if configs[Augmentation.__name__]['type'] == 'parallel':

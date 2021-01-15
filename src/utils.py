@@ -7,6 +7,7 @@ import random
 import numpy as np
 from omegaconf import DictConfig
 import torch
+import math
 
 
 logger = logging.getLogger(__name__)
@@ -52,3 +53,20 @@ def calculate_hash(args: DictConfig):
     args_copy = deepcopy(args)
     args_copy.data.pop('path')
     return hashlib.md5(str(args_copy).encode()).hexdigest()
+
+
+
+class TrainingSignalAnnealing(object):
+    def __init__(self, num_targets: int, total_steps: int):
+        self.num_targets = num_targets
+        self.total_steps = total_steps
+        self.current_step = 1
+
+    def step(self):
+        self.current_step += 1
+
+    @property
+    def threshold(self):
+        alpha_t = math.exp((self.current_step / self.total_steps - 1) * 5)
+        return alpha_t * (1 - 1 / self.num_targets) + 1 / self.num_targets
+

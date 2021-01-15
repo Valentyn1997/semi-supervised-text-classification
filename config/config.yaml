@@ -44,6 +44,7 @@ exp:
   checkpoint: True  # Saving best model in RAM and then using it for test
   gpus: '-1'
   precision: 32  # 16 / 32
+  tsa: True  # Training signal annealing
 
 # Hydra defaults
 defaults:
