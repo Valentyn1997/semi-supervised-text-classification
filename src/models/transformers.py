@@ -88,6 +88,8 @@ class PretrainedTransformer(LightningModule):
             else:
                 self.hparams.exp.max_steps = (len(train_dataloader) //
                                               self.hparams.exp.gradient_accumulation_steps * self.hparams.exp.max_epochs)
+        if self.hparams.exp.tsa:
+            self.tsa = TrainingSignalAnnealing(len(self.class_counts), self.hparams.exp.max_steps)
 
     def configure_optimizers(self):
         if self.lr is not None:
@@ -112,8 +114,13 @@ class PretrainedTransformer(LightningModule):
         }
         return [optimizer], [scheduler]
 
+    def optimizer_step(self, *args, **kwargs) -> None:
+        super().optimizer_step(*args, **kwargs)
+        if self.hparams.exp.tsa:
+            self.tsa.step()
+
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.train_dataset, shuffle=True, batch_size=self.hparams.data.batch_size.train, num_workers=5)
+        return DataLoader(self.train_dataset, shuffle=True, batch_size=self.hparams.data.batch_size.train, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(self.val_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.val, num_workers=5)
@@ -137,12 +144,22 @@ class PretrainedTransformer(LightningModule):
             batch = batch[0]
         logits = self(batch)
         labels = batch[3]
-        loss = F.cross_entropy(logits, labels, weight=self.cross_entropy_weights.type_as(logits))
+
+        if self.hparams.exp.tsa:
+            scores = torch.softmax(logits.detach(), dim=-1)
+            max_probs, preds = torch.max(scores, dim=-1)
+            mask = (max_probs.le(self.tsa.threshold) | (labels != preds)).float()
+            loss = (F.cross_entropy(logits, labels, reduction='none',
+                                    weight=self.cross_entropy_weights.type_as(logits)) * mask).mean()
+        else:
+            loss = F.cross_entropy(logits, labels, weight=self.cross_entropy_weights.type_as(logits))
 
         result = TrainResult(minimize=loss)
         result.log('train_loss', loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log_dict(self.calculate_metrics(logits.detach(), labels, prefix='train'),
                         on_epoch=True, on_step=False, sync_dist=True)
+        if self.hparams.exp.tsa:
+            result.log('train_l_mask', mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         return result
 
     def validation_step(self, batch, batch_idx):
@@ -236,14 +253,6 @@ class SSLPretrainedTransformer(PretrainedTransformer):
             'test': len(self.test_dataset)
         })
 
-        if self.hparams.exp.tsa:
-            self.tsa = TrainingSignalAnnealing(len(self.class_counts), self.hparams.exp.max_steps)
-
-    def optimizer_step(self, *args, **kwargs) -> None:
-        super().optimizer_step(*args, **kwargs)
-        if self.hparams.exp.tsa:
-            self.tsa.step()
-
     def training_step(self, composite_batch, batch_idx):
         # Batch collation
         l_batch = composite_batch[0][0][0]
@@ -256,7 +265,8 @@ class SSLPretrainedTransformer(PretrainedTransformer):
             l_scores = torch.softmax(l_logits.detach(), dim=-1)
             l_max_probs, l_preds = torch.max(l_scores, dim=-1)
             l_mask = (l_max_probs.le(self.tsa.threshold) | (l_labels != l_preds)).float()
-            l_loss = (F.cross_entropy(l_logits, l_labels, reduction='none') * l_mask).mean()
+            l_loss = (F.cross_entropy(l_logits, l_labels, reduction='none',
+                                      weight=self.cross_entropy_weights.type_as(l_logits)) * l_mask).mean()
         else:
             l_loss = F.cross_entropy(l_logits, l_labels, reduction='mean', weight=self.cross_entropy_weights.type_as(l_logits))
 
