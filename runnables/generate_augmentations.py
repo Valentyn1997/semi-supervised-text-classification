@@ -32,7 +32,7 @@ original_dfs = {
 augmentation_list = [
     # naw.WordEmbsAug,
     # BatchBackTranslationAug,
-    # BatchAbstSummAug,
+    BatchAbstSummAug,
     naw.SynonymAug,
     naw.ContextualWordEmbsAug,
     nas.ContextualWordEmbsForSentenceAug

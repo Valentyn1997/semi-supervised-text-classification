@@ -9,7 +9,9 @@ model:
   threshold: 0.95
   lambda_u: 1.0
   ul_branches: 2
-  max_ul_batch_size_per_gpu: 65  # taking full ul_batch, if max_ul_batch_size_per_gpu = mu * train.batch_size *  (ul_branches - 1) / n_gpus
+  max_ul_batch_size_per_gpu: 50  # taking full ul_batch, if max_ul_batch_size_per_gpu = mu * train.batch_size *  (ul_branches - 1) / n_gpus
+  choose_only_wrongly_predicted_branches: True
+  from_scratch: True  # Applies init_weight() method after loading pretrained model -> Applicable for SSL
 
 exp:
   val_check_interval: 1.0

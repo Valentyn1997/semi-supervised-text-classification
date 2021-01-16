@@ -49,6 +49,8 @@ class PretrainedTransformer(LightningModule):
                                                       config=self.config,
                                                       cache_dir=self.hparams.model.cache_dir
                                                       if self.hparams.model.cache_dir else None)
+        if self.hparams.model.from_scratch:
+            self.model.init_weights()
         self.best_model = self.model
         self.cross_entropy_weights = None
 
@@ -292,10 +294,12 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 if u_mask[i]:
                     nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches)
                                        if ind != u_best_branches[i]
-                                       # and bool(u_mask_2d[ind, i])
+                                       and (u_targets_2d[ind, i] != u_targets_2d[u_best_branches[i], i]
+                                            or not self.hparams.model.choose_only_wrongly_predicted_branches)
                                        ]
-                    u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
-                    u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
+                    if len(nonmax_branches) > 0:
+                        u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
+                        u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
 
             # Cutting huge batches
             if self.hparams.model.max_ul_batch_size_per_gpu is not None:
@@ -317,6 +321,8 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         result.log('train_loss_l', l_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_loss_ul', u_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_u_mask', u_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
+        if u_mask.int().sum() > 0:
+            result.log('train_u_batch_size', len(u_targets), on_epoch=True, on_step=False, sync_dist=True)
         if self.hparams.exp.tsa:
             result.log('train_l_mask', l_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         result.log_dict(self.calculate_metrics(l_logits.detach(), l_labels, prefix='train'),
