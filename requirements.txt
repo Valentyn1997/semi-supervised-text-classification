@@ -11,7 +11,7 @@ torch==1.6.0
 matplotlib
 hydra_colorlog
 
-nlpaug
+nlpaug==1.1.2
 nltk
 fairseq
 fastBPE

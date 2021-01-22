@@ -125,10 +125,10 @@ class PretrainedTransformer(LightningModule):
         return DataLoader(self.train_dataset, shuffle=True, batch_size=self.hparams.data.batch_size.train, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self.val_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.val, num_workers=5)
+        return DataLoader(self.val_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.val, num_workers=2)
 
     def test_dataloader(self) -> DataLoader:
-        return DataLoader(self.test_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.test, num_workers=5)
+        return DataLoader(self.test_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.test, num_workers=2)
 
     def forward(self, batch, batch_idx=None, model=None):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1]}
@@ -281,7 +281,12 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_logits = self(ul_branch)
                 pseudo_labels = torch.softmax(u_logits.detach(), dim=-1)
                 u_max_probs_2d[i], u_targets_2d[i] = torch.max(pseudo_labels, dim=-1)
-        u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
+
+        if self.hparams.model.tsa_as_threshold:
+            u_mask_2d = u_max_probs_2d.ge(torch.sqrt(torch.tensor(self.tsa.threshold))).int()
+        else:
+            u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
+
         u_mask = (u_mask_2d.sum(dim=0) > 0)  # Threshold u_mask per instance, at least one branch should pass the threshold
         u_max_probs, u_best_branches = torch.max(u_max_probs_2d, dim=0)
 
@@ -306,12 +311,13 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_batch = u_batch[:self.hparams.model.max_ul_batch_size_per_gpu]
                 u_targets = u_targets[:self.hparams.model.max_ul_batch_size_per_gpu]
 
-            u_batch = [torch.stack(item) for item in zip(*u_batch)]
-            u_targets = torch.stack(u_targets).long()
+            if len(u_batch) > 0:
+                u_batch = [torch.stack(item) for item in zip(*u_batch)]
+                u_targets = torch.stack(u_targets).long()
 
-            # Unlabelled loss
-            u_logits = self(u_batch)
-            u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
+                # Unlabelled loss
+                u_logits = self(u_batch)
+                u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
 
         # Train loss / labelled accuracy
         loss = l_loss + self.hparams.model.lambda_u * u_loss
@@ -322,8 +328,9 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         result.log('train_loss_ul', u_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_u_mask', u_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         if u_mask.int().sum() > 0:
-            result.log('train_u_batch_size', len(u_targets), on_epoch=True, on_step=False, sync_dist=True)
+            result.log('train_u_batch_size', torch.tensor(len(u_targets)).float(), on_epoch=True, on_step=False, sync_dist=True)
         if self.hparams.exp.tsa:
+            result.log('tsa_threshold', torch.tensor(self.tsa.threshold), on_epoch=True, on_step=False, sync_dist=True)
             result.log('train_l_mask', l_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         result.log_dict(self.calculate_metrics(l_logits.detach(), l_labels, prefix='train'),
                         on_epoch=True, on_step=False, sync_dist=True)
