@@ -283,7 +283,7 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_max_probs_2d[i], u_targets_2d[i] = torch.max(pseudo_labels, dim=-1)
 
         if self.hparams.model.tsa_as_threshold:
-            u_mask_2d = u_max_probs_2d.ge(torch.sqrt(torch.tensor(self.tsa.threshold))).int()
+            u_mask_2d = u_max_probs_2d.ge(torch.tensor(self.tsa.threshold)**(1/3)).int()
         else:
             u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
 
@@ -291,10 +291,10 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         u_max_probs, u_best_branches = torch.max(u_max_probs_2d, dim=0)
 
         u_loss = torch.tensor(0.0).type_as(l_loss)
+        u_batch = []
+        u_targets = []
         if u_mask.int().sum() > 0:
             # Creating one batch for unlabelled loss
-            u_batch = []
-            u_targets = []
             for i in range(len(ul_branches[0][0])):
                 if u_mask[i]:
                     nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches)
@@ -327,8 +327,7 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         result.log('train_loss_l', l_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_loss_ul', u_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_u_mask', u_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
-        if u_mask.int().sum() > 0:
-            result.log('train_u_batch_size', torch.tensor(len(u_targets)).float(), on_epoch=True, on_step=False, sync_dist=True)
+        result.log('train_u_batch_size', torch.tensor(len(u_targets)).float(), on_epoch=True, on_step=False, sync_dist=True)
         if self.hparams.exp.tsa:
             result.log('tsa_threshold', torch.tensor(self.tsa.threshold), on_epoch=True, on_step=False, sync_dist=True)
             result.log('train_l_mask', l_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
