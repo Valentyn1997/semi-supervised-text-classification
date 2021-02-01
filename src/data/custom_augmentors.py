@@ -229,7 +229,7 @@ def predict(self, texts, target_words=None, n=1, external_memory=None,
     # Prediction
     results = []
     with torch.no_grad():
-        outputs = self.model(input_ids=input_idxes, attention_mask=mask_inputs, past=external_memory)
+        outputs = self.model(input_ids=input_idxes, attention_mask=mask_inputs, past_key_values=external_memory)
 
     # Selection
     for output, target_token in zip(outputs[0], target_words):

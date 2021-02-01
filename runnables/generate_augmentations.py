@@ -5,7 +5,6 @@ from os.path import exists
 import pandas as pd
 import nlpaug.augmenter.word as naw
 import nlpaug.augmenter.sentence as nas
-from transformers import AutoTokenizer
 from src.data.custom_augmentors import BatchBackTranslationAug, BatchAbstSummAug
 
 import itertools
@@ -33,8 +32,8 @@ augmentation_list = [
     # naw.WordEmbsAug,
     # BatchBackTranslationAug,
     # BatchAbstSummAug,
-    naw.SynonymAug,
-    naw.ContextualWordEmbsAug,
+    # naw.SynonymAug,
+    # naw.ContextualWordEmbsAug,
     nas.ContextualWordEmbsForSentenceAug
 ]
 
@@ -125,7 +124,7 @@ for Augmentation in augmentation_list:
     # Augmenting data
     for source in ['unlabelled']:
         augmented_df = {}
-        original_dfs[source]['sentence'] = original_dfs[source].sentence.astype(str).str.replace('\D+', '')
+        # original_dfs[source]['sentence'] = original_dfs[source].sentence.astype(str).str.replace('\D+', '')
         for i in (range(configs[Augmentation.__name__]['n_times'][source])):
             for config in configs_list:
                 aug = Augmentation(**config)

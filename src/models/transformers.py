@@ -49,12 +49,15 @@ class PretrainedTransformer(LightningModule):
                                                       config=self.config,
                                                       cache_dir=self.hparams.model.cache_dir
                                                       if self.hparams.model.cache_dir else None)
+        if self.hparams.model.from_scratch:
+            self.model.init_weights()
         self.best_model = self.model
         self.cross_entropy_weights = None
 
     def prepare_data(self):
         if 'data_size' not in self.hparams.data:
-            self.train_dataset = self.load_and_cache_examples(mode='train')
+            self.train_dataset = self.load_and_cache_examples(mode='train', num_labelled=self.hparams.data.num_labelled_train,
+                                                              balance_labelled=self.hparams.data.balance_labelled)
 
             # Targets count
             if isinstance(self.train_dataset, TensorDataset):
@@ -123,10 +126,10 @@ class PretrainedTransformer(LightningModule):
         return DataLoader(self.train_dataset, shuffle=True, batch_size=self.hparams.data.batch_size.train, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self.val_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.val, num_workers=5)
+        return DataLoader(self.val_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.val, num_workers=2)
 
     def test_dataloader(self) -> DataLoader:
-        return DataLoader(self.test_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.test, num_workers=5)
+        return DataLoader(self.test_dataset, shuffle=False, batch_size=self.hparams.data.batch_size.test, num_workers=2)
 
     def forward(self, batch, batch_idx=None, model=None):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1]}
@@ -188,10 +191,7 @@ class PretrainedTransformer(LightningModule):
         result = acc_and_f1(preds, labels, prefix=prefix)
         return result
 
-    def load_and_cache_examples(self, mode):
-        label_list = self.processor.get_labels()
-        examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
-
+    def load_and_cache_examples(self, mode, num_labelled=None, balance_labelled=False):
         cached_features_file = os.path.join(
             self.hparams.data.path,
             "cached_{}_{}_{}_{}_{}".format(mode, list(filter(None, self.hparams.model.model_name_or_path.split("/"))).pop(),
@@ -200,10 +200,15 @@ class PretrainedTransformer(LightningModule):
         )
 
         if self.hparams.data.load_from_cache and os.path.exists(cached_features_file):
-            logger.info("Loading features from cache file %s", cached_features_file)
+            logger.info(f"Loading {mode} features from cache file {cached_features_file}")
             features = torch.load(cached_features_file)
         else:
-            logger.info(f"Creating {mode} features from dataset file at {cached_features_file}")
+            logger.info(f"Creating {mode} features from dataset tsv file")
+            label_list = self.processor.get_labels()
+            examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
+            if num_labelled is not None:
+                examples = self.processor.remove_labels(examples, n_labels_to_leave=num_labelled, shuffle=False,
+                                                        balance_labelled=balance_labelled)
             features = convert_examples_to_features(
                 examples,
                 self.tokenizer,
@@ -279,35 +284,43 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_logits = self(ul_branch)
                 pseudo_labels = torch.softmax(u_logits.detach(), dim=-1)
                 u_max_probs_2d[i], u_targets_2d[i] = torch.max(pseudo_labels, dim=-1)
-        u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
+
+        if self.hparams.model.tsa_as_threshold:
+            u_mask_2d = u_max_probs_2d.ge(torch.tensor(self.tsa.threshold)**(1/3)).int()
+        else:
+            u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
+
         u_mask = (u_mask_2d.sum(dim=0) > 0)  # Threshold u_mask per instance, at least one branch should pass the threshold
         u_max_probs, u_best_branches = torch.max(u_max_probs_2d, dim=0)
 
         u_loss = torch.tensor(0.0).type_as(l_loss)
+        u_batch = []
+        u_targets = []
         if u_mask.int().sum() > 0:
             # Creating one batch for unlabelled loss
-            u_batch = []
-            u_targets = []
             for i in range(len(ul_branches[0][0])):
                 if u_mask[i]:
                     nonmax_branches = [ul_branch for (ind, ul_branch) in enumerate(ul_branches)
                                        if ind != u_best_branches[i]
-                                       # and bool(u_mask_2d[ind, i])
+                                       and (u_targets_2d[ind, i] != u_targets_2d[u_best_branches[i], i]
+                                            or not self.hparams.model.choose_only_wrongly_predicted_branches)
                                        ]
-                    u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
-                    u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
+                    if len(nonmax_branches) > 0:
+                        u_batch.extend([[item[i] for item in branch] for branch in nonmax_branches])
+                        u_targets.extend(u_targets_2d[u_best_branches[i]][i].repeat(len(nonmax_branches)))
 
             # Cutting huge batches
             if self.hparams.model.max_ul_batch_size_per_gpu is not None:
                 u_batch = u_batch[:self.hparams.model.max_ul_batch_size_per_gpu]
                 u_targets = u_targets[:self.hparams.model.max_ul_batch_size_per_gpu]
 
-            u_batch = [torch.stack(item) for item in zip(*u_batch)]
-            u_targets = torch.stack(u_targets).long()
+            if len(u_batch) > 0:
+                u_batch = [torch.stack(item) for item in zip(*u_batch)]
+                u_targets = torch.stack(u_targets).long()
 
-            # Unlabelled loss
-            u_logits = self(u_batch)
-            u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
+                # Unlabelled loss
+                u_logits = self(u_batch)
+                u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
 
         # Train loss / labelled accuracy
         loss = l_loss + self.hparams.model.lambda_u * u_loss
@@ -317,7 +330,9 @@ class SSLPretrainedTransformer(PretrainedTransformer):
         result.log('train_loss_l', l_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_loss_ul', u_loss.detach(), on_epoch=True, on_step=False, sync_dist=True)
         result.log('train_u_mask', u_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
+        result.log('train_u_batch_size', torch.tensor(len(u_targets)).float(), on_epoch=True, on_step=False, sync_dist=True)
         if self.hparams.exp.tsa:
+            result.log('tsa_threshold', torch.tensor(self.tsa.threshold), on_epoch=True, on_step=False, sync_dist=True)
             result.log('train_l_mask', l_mask.float().mean(), on_epoch=True, on_step=False, sync_dist=True)
         result.log_dict(self.calculate_metrics(l_logits.detach(), l_labels, prefix='train'),
                         on_epoch=True, on_step=False, sync_dist=True)

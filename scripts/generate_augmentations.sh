@@ -4,6 +4,10 @@
 #SBATCH --cpus-per-task=3
 #SBATCH --gres=gpu:1
 
+
+# !!! Run the command not in Slurm cluster first - in order to load pre-trained weights from transformers library
+# Otherwise could produce deadlock.
+
 cd ..
 source venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:./
