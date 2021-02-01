@@ -19,6 +19,8 @@ data:
     train: 20
     val: 20
     test: 20
+  num_labelled_train:    # Total number of labelled train datapoints
+  balance_labelled: True
   load_from_cache: False
   write_to_cache: False
 

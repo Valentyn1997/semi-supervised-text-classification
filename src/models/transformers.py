@@ -56,7 +56,8 @@ class PretrainedTransformer(LightningModule):
 
     def prepare_data(self):
         if 'data_size' not in self.hparams.data:
-            self.train_dataset = self.load_and_cache_examples(mode='train')
+            self.train_dataset = self.load_and_cache_examples(mode='train', num_labelled=self.hparams.data.num_labelled_train,
+                                                              balance_labelled=self.hparams.data.balance_labelled)
 
             # Targets count
             if isinstance(self.train_dataset, TensorDataset):
@@ -190,10 +191,7 @@ class PretrainedTransformer(LightningModule):
         result = acc_and_f1(preds, labels, prefix=prefix)
         return result
 
-    def load_and_cache_examples(self, mode):
-        label_list = self.processor.get_labels()
-        examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
-
+    def load_and_cache_examples(self, mode, num_labelled=None, balance_labelled=False):
         cached_features_file = os.path.join(
             self.hparams.data.path,
             "cached_{}_{}_{}_{}_{}".format(mode, list(filter(None, self.hparams.model.model_name_or_path.split("/"))).pop(),
@@ -202,10 +200,15 @@ class PretrainedTransformer(LightningModule):
         )
 
         if self.hparams.data.load_from_cache and os.path.exists(cached_features_file):
-            logger.info("Loading features from cache file %s", cached_features_file)
+            logger.info(f"Loading {mode} features from cache file {cached_features_file}")
             features = torch.load(cached_features_file)
         else:
-            logger.info(f"Creating {mode} features from dataset file at {cached_features_file}")
+            logger.info(f"Creating {mode} features from dataset tsv file")
+            label_list = self.processor.get_labels()
+            examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
+            if num_labelled is not None:
+                examples = self.processor.remove_labels(examples, n_labels_to_leave=num_labelled, shuffle=False,
+                                                        balance_labelled=balance_labelled)
             features = convert_examples_to_features(
                 examples,
                 self.tokenizer,

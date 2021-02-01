@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import glob
 from tqdm import tqdm
+from typing import Dict, Tuple
 
 from src import OUTPUT_MODES
 
@@ -80,14 +81,14 @@ class SupervisedTwoLabelProcessor(DataProcessor):
         return ["Argument_for", "Argument_against"]
 
     @staticmethod
-    def read_tsv(input_file):
+    def read_tsv(input_file) -> pd.DataFrame:
         df = pd.read_csv(input_file, sep="\t")
         df = df.replace(np.nan, '', regex=True)
         df["topic"] = df["topic"].apply(lambda x: x.replace(' ', '_'))
         return df
 
     @staticmethod
-    def read_tsvs(input_dir):
+    def read_tsvs(input_dir) -> Dict[str, pd.DataFrame]:
         dfs = {}
         input_files = glob.glob(f'{input_dir}/*')
         for input_file in input_files:
@@ -97,24 +98,45 @@ class SupervisedTwoLabelProcessor(DataProcessor):
         return dfs
 
     @staticmethod
-    def _create_examples(df, aug_df=None):
+    def _create_examples(df, aug_df=None) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Creates examples for the training and test sets."""
         df = df[df['annotation'] != "NoArgument"]
         if aug_df is not None:
             aug_df = aug_df[aug_df['id'].isin(df.id)]
         return df, aug_df
 
-    # @staticmethod
-    # def _create_example(row, aug_df=None):
-    #     guid = row['id']
-    #     text_a = row["sentence"]
-    #     text_b = row["topic"]
-    #     label = row["annotation"]
-    #     if aug_df is not None:
-    #         augmentations = aug_df[aug_df.id == guid]
-    #         return dict(guid=guid, text_a=text_a, text_b=text_b, label=label, augmentations=augmentations)
-    #     else:
-    #         return dict(guid=guid, text_a=text_a, text_b=text_b, label=label)
+    @staticmethod
+    def remove_labels(df: pd.DataFrame, n_labels_to_leave: int, shuffle=False, balance_labelled=False) -> pd.DataFrame:
+        """
+        Removing labels for SSL purposes
+        @param shuffle: Shuffle indices to remove
+        @param dataset: Dataset to change
+        @param n_labels_to_leave: int
+        """
+
+        labels = df['annotation'].values
+        assert n_labels_to_leave <= len(labels)  # Requiring more labels, than exist
+
+        classes_counts = dict(zip(*np.unique(labels, return_counts=True)))
+        # classes = classes[classes != -1]  # For originally SSL datasets
+        if balance_labelled:
+            n_labels_per_cls = {cls: n_labels_to_leave // len(classes_counts) for cls in classes_counts.keys()}
+            if n_labels_to_leave % len(classes_counts) != 0:
+                logger.warning(f'Not equal distribution of classes. Used number of labels: '
+                               f'{n_labels_per_cls * len(classes_counts)}')
+        else:
+            n_labels_per_cls = {cls: round(n_labels_to_leave * classes_counts[cls] / sum(classes_counts.values()))
+                                for cls in classes_counts.keys()}
+
+        for cls in classes_counts.keys():
+            if shuffle:
+                n_to_drop = len(labels[labels == cls]) - n_labels_per_cls[cls]
+                ind_to_drop = np.random.choice(np.arange(0, len(labels[labels == cls])), n_to_drop, replace=False)
+                labels[np.where(labels == cls)[0][ind_to_drop]] = -1
+            else:
+                labels[np.where(labels == cls)[0][n_labels_per_cls[cls]:]] = -1
+
+        return df[labels != -1]
 
 
 class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
@@ -190,13 +212,15 @@ def convert_examples_to_features(examples: pd.DataFrame,
         grouped_aug = examples_aug.groupby('id')
         for id, group in tqdm(grouped_aug, total=len(grouped_aug)):
             features_aug = []
-            for (_, example_aug) in group.iterrows():
-                label = examples[examples.id == id].iloc[0].annotation
-                features_aug.append((example_aug['aug_name'],
-                                    preprocess_example(example_aug['sentence'], '', label,
-                                                       tokenizer, mask_padding_with_zero, max_length, pad_on_left,
-                                                       pad_token, pad_token_segment_id, output_mode, label_map)))
-            extended_features[id] = (features[id], features_aug)
+
+            if id in features:
+                for (_, example_aug) in group.iterrows():
+                    label = examples[examples.id == id].iloc[0].annotation
+                    features_aug.append((example_aug['aug_name'],
+                                        preprocess_example(example_aug['sentence'], '', label,
+                                                           tokenizer, mask_padding_with_zero, max_length, pad_on_left,
+                                                           pad_token, pad_token_segment_id, output_mode, label_map)))
+                extended_features[id] = (features[id], features_aug)
 
         return extended_features
 
