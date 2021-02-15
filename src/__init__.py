@@ -29,10 +29,3 @@ MODEL_CLASSES = {
     'albert': (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer),
     'xlmroberta': (XLMRobertaConfig, XLMRobertaForSequenceClassification, XLMRobertaTokenizer)
 }
-
-OUTPUT_MODES = {
-    "SL2": "classification",
-    "SL3": "classification",
-    "SSL2": "classification",
-    "SSL3": "classification",
-}

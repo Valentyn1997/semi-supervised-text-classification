@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from transformers import AdamW, get_linear_schedule_with_warmup
 from pytorch_lightning.core.step_result import TrainResult, EvalResult
 
-from src import MODEL_CLASSES, OUTPUT_MODES
+from src import MODEL_CLASSES
 from src.data.processor import PROCESSORS, convert_examples_to_features
 from src.data.dataset import AugmentableTextClassificationDataset, FixMatchCompositeTrainDataset
 from src.utils import acc_and_f1, TrainingSignalAnnealing
@@ -22,9 +22,10 @@ class PretrainedTransformer(LightningModule):
         self.lr = None  # Placeholder for auto_lr_find
         self.hparams = args  # Will be logged to mlflow
 
-        self.processor = PROCESSORS[self.hparams.exp.task_name](load_augmentations=self.hparams.setting == 'ssl' or
+        self.processor = PROCESSORS[self.hparams.exp.task_name](labels_list=self.hparams.data.labels_list,
+                                                                load_augmentations=self.hparams.setting == 'ssl' or
                                                                 self.hparams.data.augment)
-        self.output_mode = OUTPUT_MODES[self.hparams.exp.task_name]
+        self.output_mode = "classification"
         label_list = self.processor.get_labels()
         self.num_labels = len(label_list)
 
@@ -199,13 +200,14 @@ class PretrainedTransformer(LightningModule):
                                            str(self.hparams.data.test_id)),
         )
 
+        examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
+
         if self.hparams.data.load_from_cache and os.path.exists(cached_features_file):
             logger.info(f"Loading {mode} features from cache file {cached_features_file}")
             features = torch.load(cached_features_file)
         else:
             logger.info(f"Creating {mode} features from dataset tsv file")
             label_list = self.processor.get_labels()
-            examples, examples_aug = getattr(self.processor, f'get_{mode}_examples')(self.hparams)
             if num_labelled is not None:
                 examples = self.processor.remove_labels(examples, n_labels_to_leave=num_labelled, shuffle=False,
                                                         balance_labelled=balance_labelled)
@@ -338,10 +340,10 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                         on_epoch=True, on_step=False, sync_dist=True)
         return result
 
-    def load_and_cache_examples(self, mode):
+    def load_and_cache_examples(self, mode, num_labelled=None, balance_labelled=False):
         if mode == 'val' or mode == 'test':
-            return super().load_and_cache_examples(mode)
+            return super().load_and_cache_examples(mode, num_labelled, balance_labelled)
         elif mode == 'train':
-            train_l = super().load_and_cache_examples('train')
-            train_ul = super().load_and_cache_examples('unlab')
+            train_l = super().load_and_cache_examples('train', num_labelled, balance_labelled)
+            train_ul = super().load_and_cache_examples('unlab', num_labelled=None, balance_labelled=False)
             return FixMatchCompositeTrainDataset(train_l, train_ul, self.hparams.model.mu)
