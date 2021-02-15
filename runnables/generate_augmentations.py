@@ -127,7 +127,7 @@ for Augmentation in augmentation_list:
         # original_dfs[source]['sentence'] = original_dfs[source].sentence.astype(str).str.replace('\D+', '')
         for i in (range(configs[Augmentation.__name__]['n_times'][source])):
             for config in configs_list:
-                aug = Augmentation(**config)
+                aug = Augmentation(device='cuda', **config)
 
                 if configs[Augmentation.__name__]['type'] == 'parallel':
                     augmented_df[(i, str(config))] = pd.DataFrame(aug.augment(list(original_dfs[source].sentence),

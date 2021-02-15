@@ -8,15 +8,13 @@ import glob
 from tqdm import tqdm
 from typing import Dict, Tuple
 
-from src import OUTPUT_MODES
-
 logger = logging.getLogger(__name__)
 
 
 class SupervisedTwoLabelProcessor(DataProcessor):
     """Processor for the argument mining supervised data set."""
 
-    def __init__(self, load_augmentations=True):
+    def __init__(self, load_augmentations=True, **kwargs):
         super().__init__()
         self.mask = None  # Used for train/val split for cross-topic setting
         self.load_augmentations = load_augmentations
@@ -125,7 +123,7 @@ class SupervisedTwoLabelProcessor(DataProcessor):
                 logger.warning(f'Not equal distribution of classes. Used number of labels: '
                                f'{n_labels_per_cls * len(classes_counts)}')
         else:
-            n_labels_per_cls = {cls: round(n_labels_to_leave * classes_counts[cls] / sum(classes_counts.values()))
+            n_labels_per_cls = {cls: int(n_labels_to_leave * classes_counts[cls] / sum(classes_counts.values()))
                                 for cls in classes_counts.keys()}
 
         for cls in classes_counts.keys():
@@ -150,11 +148,23 @@ class SupervisedThreeLabelProcessor(SupervisedTwoLabelProcessor):
         return df, aug_df
 
 
+class SupervisedAllLabelsProcessor(SupervisedTwoLabelProcessor):
+    def __init__(self, labels_list, load_augmentations=True):
+        super().__init__(load_augmentations)
+        self.labels_list = labels_list
+
+    def get_labels(self):
+        """Gets the list of labels for this data set."""
+        return self.labels_list
+
+
 PROCESSORS = {
     "SL2": SupervisedTwoLabelProcessor,  # fully-supervised setting, 2 labels: "Argument_for", "Argument_against"
     "SL3": SupervisedThreeLabelProcessor,  # fully-supervised setting, 3 labels: "Argument_for", "Argument_against", "NoArgument"
     "SSL2": SupervisedTwoLabelProcessor,  # ssl setting, 2 labels: "Argument_for", "Argument_against" + unlabelled subset
-    "SSL3": SupervisedThreeLabelProcessor  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" +
+    "SSL3": SupervisedThreeLabelProcessor,  # ssl setting, 3 labels: "Argument_for", "Argument_against", "NoArgument" +
+    "SL": SupervisedAllLabelsProcessor,
+    "SSL": SupervisedAllLabelsProcessor
 }
 
 
@@ -190,7 +200,7 @@ def convert_examples_to_features(examples: pd.DataFrame,
             label_list = processor.get_labels()
             logger.info("Using label list %s for task %s" % (label_list, task))
         if output_mode is None:
-            output_mode = OUTPUT_MODES[task]
+            output_mode = "classification"
             logger.info("Using output mode %s for task %s" % (output_mode, task))
 
     label_map = {label: i for i, label in enumerate(label_list)}

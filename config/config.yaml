@@ -10,7 +10,7 @@ model: # Model params
 
 # Data params
 data:
-  path: ???   #  data/in-topic | data/cross-topic
+  path: ???   #  data/REVIEWS-clean/in-topic
   test_id:  # The topic id of the test_set. Set value -1 for random selection from all topics. ["abortion", "cloning", "death_penalty", "gun_control", "marijuana_legalization", "minimum_wage", "nuclear_energy", "school_uniforms"]
   max_seq_length: 60  # The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,
                         # sequences shorter will be padded.
@@ -23,6 +23,7 @@ data:
   balance_labelled: True
   load_from_cache: False
   write_to_cache: False
+  labels_list:
 
 # Optimizer
 optimizer:
