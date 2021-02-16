@@ -29,11 +29,11 @@ original_dfs = {
 
 # Params,
 augmentation_list = [
-    # naw.WordEmbsAug,
-    # BatchBackTranslationAug,
-    # BatchAbstSummAug,
-    # naw.SynonymAug,
-    # naw.ContextualWordEmbsAug,
+    naw.WordEmbsAug,
+    BatchBackTranslationAug,
+    BatchAbstSummAug,
+    naw.SynonymAug,
+    naw.ContextualWordEmbsAug,
     nas.ContextualWordEmbsForSentenceAug
 ]
 

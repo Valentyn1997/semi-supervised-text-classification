@@ -1,7 +1,15 @@
 semi-supervised-stance-detection
 ==============================
 
-Semi-supervised learning for argument mining. Project is based on 
+Semi-supervised text classification based on BERT backbone. The project adapts FixMatch (https://arxiv.org/abs/2001.07685) by introducing an adaptive weak/strong augmentations selection among 6 basic NLP augmentations:
+1. WordEmbsAug
+2. BackTranslationAug
+3. AbstSummAug
+4. SynonymAug
+5. ContextualWordEmbsAug
+6. ContextualWordEmbsForSentenceAug
+
+Project is based on 
 - [Pytorch-Lightning](https://pytorch-lightning.readthedocs.io/en/latest/) - deep-learning models
 - [Hydra](https://hydra.cc/docs/intro/) - command line arguments managment
 - [MlFlow](https://mlflow.org/) - experiments tracking
