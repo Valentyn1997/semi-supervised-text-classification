@@ -102,17 +102,16 @@ configs = {
         'type': 'single',
     },
     'ContextualWordEmbsForSentenceAug': {
-            'n_times': {
-                'labelled': 10,
-                'unlabelled': 1
-            },
-            'conf': {
-                'model_path': ['gpt2', 'xlnet-base-cased'],
-                'top_k': [50],
-            },
-            'type': 'single',
+        'n_times': {
+            'labelled': 10,
+            'unlabelled': 1
         },
-
+        'conf': {
+            'model_path': ['gpt2', 'xlnet-base-cased'],
+            'top_k': [50],
+        },
+        'type': 'single',
+    },
 }
 
 for Augmentation in augmentation_list:
@@ -130,8 +129,7 @@ for Augmentation in augmentation_list:
                 aug = Augmentation(device='cuda', **config)
 
                 if configs[Augmentation.__name__]['type'] == 'parallel':
-                    augmented_df[(i, str(config))] = pd.DataFrame(aug.augment(list(original_dfs[source].sentence),
-                                                                               num_thread=10),
+                    augmented_df[(i, str(config))] = pd.DataFrame(aug.augment(list(original_dfs[source].sentence), num_thread=10),
                                                                   columns=['sentence'], index=original_dfs[source].id)
                 elif configs[Augmentation.__name__]['type'] == 'single':
                     augmented_df[(i, str(config))] = pd.DataFrame(list(original_dfs[source].sentence.apply(aug.augment)),

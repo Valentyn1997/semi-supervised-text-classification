@@ -55,7 +55,6 @@ def calculate_hash(args: DictConfig):
     return hashlib.md5(str(args_copy).encode()).hexdigest()
 
 
-
 class TrainingSignalAnnealing(object):
     def __init__(self, num_targets: int, total_steps: int):
         self.num_targets = num_targets
@@ -69,4 +68,3 @@ class TrainingSignalAnnealing(object):
     def threshold(self):
         alpha_t = math.exp((self.current_step / self.total_steps - 1) * 5)
         return alpha_t * (1 - 1 / self.num_targets) + 1 / self.num_targets
-

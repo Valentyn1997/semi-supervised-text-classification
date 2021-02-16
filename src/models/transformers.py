@@ -288,7 +288,7 @@ class SSLPretrainedTransformer(PretrainedTransformer):
                 u_max_probs_2d[i], u_targets_2d[i] = torch.max(pseudo_labels, dim=-1)
 
         if self.hparams.model.tsa_as_threshold:
-            u_mask_2d = u_max_probs_2d.ge(torch.tensor(self.tsa.threshold)**(1/3)).int()
+            u_mask_2d = u_max_probs_2d.ge(torch.tensor(self.tsa.threshold) ** (1 / 3)).int()
         else:
             u_mask_2d = u_max_probs_2d.ge(self.hparams.model.threshold).int()
 
@@ -322,7 +322,8 @@ class SSLPretrainedTransformer(PretrainedTransformer):
 
                 # Unlabelled loss
                 u_logits = self(u_batch)
-                u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean', weight=self.cross_entropy_weights.type_as(u_logits))
+                u_loss = F.cross_entropy(u_logits, u_targets, reduction='mean',
+                                         weight=self.cross_entropy_weights.type_as(u_logits))
 
         # Train loss / labelled accuracy
         loss = l_loss + self.hparams.model.lambda_u * u_loss

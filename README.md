@@ -1,4 +1,4 @@
-semi-supervised-stance-detection
+semi-supervised-text-classification
 ==============================
 
 Semi-supervised text classification based on BERT backbone. The project adapts FixMatch algorithm (https://arxiv.org/abs/2001.07685) by introducing an adaptive weak/strong augmentations selection among 6 basic NLP augmentations (from [nlpaug](https://github.com/makcedward/nlpaug) library):

@@ -53,7 +53,8 @@ class BatchBackTranslationAug:
                     translations = [translations[sample['id'].tolist().index(i)] for i in range(len(translations))]
 
                     translations = [self.to_model.encode(sample) for sample in translations]
-                    dataset = self.to_model.task.build_dataset_for_inference(translations, [input.numel() for input in translations])
+                    dataset = self.to_model.task.build_dataset_for_inference(translations,
+                                                                             [input.numel() for input in translations])
                     sample = dataset.collater(dataset)
                     sample = utils.apply_to_sample(lambda tensor: tensor.to(self.to_model.device), sample)
                     gen_args = copy.copy(self.to_model.args)

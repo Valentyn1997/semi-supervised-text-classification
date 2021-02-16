@@ -30,7 +30,7 @@ stages:
 
 code-quality:
   stage: build
-  script: python3 -m flake8 --exclude=env,setup.py --statistics --max-line-length=130 --ignore=F401,F403,W504
+  script: python3 -m flake8 --exclude=env,setup.py --statistics --max-line-length=130 --ignore=F401,F403,W504,W503
 
 example_job:
   stage: test
