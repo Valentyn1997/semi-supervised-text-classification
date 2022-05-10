@@ -137,4 +137,15 @@ Look to `scripts/train.sh` or `scripts/hparam_search.sh`:
 
 `sbatch train.sh` or `sbatch hparam_search.sh`
 
+
+## Results & Insights
+We experiment with [OpenReview peer-reviews dataset](https://arxiv.org/pdf/2012.07743.pdf) with 3 classes. Reported: test accuracy and F1 score (after hparam tuning wrt. validation accuracy).
+
+| Method                     | Number of classes          | Test Accuracy | Test F1 (macro) score |
+|----------------------------|----------------------------|---------------|-----------------------|
+| Fully-Supervised           | 3 (pos / neg / non-stance) | 71.6312       | 70.7114               |
+| FixMatch (Semi-supervised) | 3 (pos / neg / non-stance) | 72.3404       | 72.2475               |
+
+Gain of accuracy is only marginal. FixMatch heavily relies on diverse augmentations (useful for image classification). Unfortunately, augmentations for text data don't provide enough inductive bias for semi-supervised text classification.
+
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
