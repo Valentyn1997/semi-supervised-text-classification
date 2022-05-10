@@ -148,6 +148,6 @@ We experiment with [OpenReview peer-reviews dataset](https://arxiv.org/pdf/2012.
 
 Gain of accuracy is only marginal. FixMatch heavily relies on diverse augmentations (useful for image classification). Unfortunately, augmentations for text data don't provide enough inductive bias for semi-supervised text classification.
 
-Another issue we faced were the generation of augmentations, as it could not be tenzorized. Thus, it was performed offline and saved as temporary files.
+Another issue we faced were the generation of augmentations, as it could not be tenzorized. Thus, it was performed offline and augmentations were saved as temporary files.
 
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
